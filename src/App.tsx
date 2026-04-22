@@ -39,7 +39,13 @@ const weekdays = ['Hétfő', 'Kedd', 'Szerda', 'Csütörtök', 'Péntek']
 const EXTRA_OFF_DAYS_STORAGE_KEY = 'fruit-calendar-extra-off-days-by-month'
 const START_CHILD_STORAGE_KEY = 'fruit-calendar-start-child-by-month'
 const MANUAL_OVERRIDES_STORAGE_KEY = 'fruit-calendar-manual-overrides-by-month'
+const CHILDREN_TEXT_STORAGE_KEY = 'fruit-calendar-children-text'
+const LAST_MONTH_STORAGE_KEY = 'fruit-calendar-last-month'
+const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
+const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
+const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
+const APP_VERSION = 'v1.1.0-local'
 
 type HeaderImageState = {
   dataUrl: string
@@ -56,8 +62,12 @@ function fromMonthInputValue(value: string): { year: number; monthIndex: number 
 }
 
 function App() {
-  const [childrenText, setChildrenText] = useState(defaultChildren.join('\n'))
-  const [monthValue, setMonthValue] = useState('2026-02')
+  const [childrenText, setChildrenText] = useState(() => {
+    return localStorage.getItem(CHILDREN_TEXT_STORAGE_KEY) ?? defaultChildren.join('\n')
+  })
+  const [monthValue, setMonthValue] = useState(() => {
+    return localStorage.getItem(LAST_MONTH_STORAGE_KEY) ?? '2026-02'
+  })
   const [startChildByMonth, setStartChildByMonth] = useState<Record<string, string>>(() => {
     try {
       const stored = localStorage.getItem(START_CHILD_STORAGE_KEY)
@@ -136,6 +146,23 @@ function App() {
     }
     return null
   })
+  const [uiTheme, setUiTheme] = useState<'elegant' | 'pastel' | 'minimal'>(() => {
+    const stored = localStorage.getItem(UI_THEME_STORAGE_KEY)
+    if (stored === 'pastel' || stored === 'minimal' || stored === 'elegant') {
+      return stored
+    }
+    return 'elegant'
+  })
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem(DARK_MODE_STORAGE_KEY) === 'true'
+  })
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(() => {
+    const stored = localStorage.getItem(SETTINGS_PANEL_OPEN_STORAGE_KEY)
+    if (stored === null) {
+      return true
+    }
+    return stored === 'true'
+  })
 
   useEffect(() => {
     setExtraOffDaysText(monthOffDaysByMonth[monthValue] ?? '')
@@ -176,12 +203,54 @@ function App() {
     }
   }, [manualOverridesByMonth])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHILDREN_TEXT_STORAGE_KEY, childrenText)
+    } catch (error) {
+      console.warn('Children text localStorage save failed:', error)
+    }
+  }, [childrenText])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_MONTH_STORAGE_KEY, monthValue)
+    } catch (error) {
+      console.warn('Last month localStorage save failed:', error)
+    }
+  }, [monthValue])
+
+  useEffect(() => {
+    localStorage.setItem(UI_THEME_STORAGE_KEY, uiTheme)
+  }, [uiTheme])
+
+  useEffect(() => {
+    localStorage.setItem(DARK_MODE_STORAGE_KEY, `${darkMode}`)
+  }, [darkMode])
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_PANEL_OPEN_STORAGE_KEY, `${settingsPanelOpen}`)
+  }, [settingsPanelOpen])
+
   const children = useMemo(() => {
     return childrenText
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
   }, [childrenText])
+
+  useEffect(() => {
+    if (children.length === 0) {
+      return
+    }
+    if (!children.includes(startChild)) {
+      const fallback = children[0]
+      setStartChild(fallback)
+      setStartChildByMonth((prev) => ({
+        ...prev,
+        [monthValue]: fallback,
+      }))
+    }
+  }, [children, startChild, monthValue])
 
   const extraOffDays = useMemo(() => {
     return new Set(
@@ -220,21 +289,6 @@ function App() {
       displayMonthIndex: monthIndex,
     })
   }, [exportTitle, weeks, headerImage, year, monthIndex])
-
-  const nextMonth = addOneMonth(year, monthIndex)
-  const marchTestData = useMemo(() => {
-    const nextWorkingDays = getMonthWorkingDays(
-      nextMonth.year,
-      nextMonth.monthIndex,
-      new Set<string>(),
-    )
-    return generateAssignments({
-      children,
-      monthWorkingDays: nextWorkingDays,
-      startChild: monthResult.nextStartChild,
-      manualOverrides: {},
-    })
-  }, [children, monthResult.nextStartChild, nextMonth.year, nextMonth.monthIndex])
 
   const updateOverride = (dateKey: string, child: string): void => {
     setManualOverrides((prev) => {
@@ -343,15 +397,46 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className={`app theme-${uiTheme} ${darkMode ? 'dark-mode' : ''}`}>
       <header className="title">
-        <h1>Gyümölcsnaptár MVP</h1>
-        <p>Első teszt: Február 2026, kezdő gyerek: Petrilla Ádám</p>
-        <p>{`Aktív PDF sablon: ${PDF_TEMPLATE_VERSION}`}</p>
+        <div className="title-row">
+          <div>
+            <h1>Gyümölcsnaptár MVP</h1>
+            <p>Első teszt: Február 2026, kezdő gyerek: Petrilla Ádám</p>
+            <p>{`Aktív PDF sablon: ${PDF_TEMPLATE_VERSION}`}</p>
+            <p className="app-version">{`App verzió: ${APP_VERSION}`}</p>
+          </div>
+          <div className="ui-controls">
+            <label className="inline-control">
+              Téma
+              <select value={uiTheme} onChange={(e) => setUiTheme(e.target.value as 'elegant' | 'pastel' | 'minimal')}>
+                <option value="elegant">Elegant</option>
+                <option value="pastel">Pasztell</option>
+                <option value="minimal">Minimal</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="toggle-button"
+              onClick={() => setDarkMode((prev) => !prev)}
+            >
+              {darkMode ? '☀️ Világos mód' : '🌙 Sötét mód'}
+            </button>
+          </div>
+        </div>
       </header>
 
-      <section className="layout">
-        <aside className="panel">
+      <section className={`layout ${settingsPanelOpen ? '' : 'sidebar-collapsed'}`}>
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={() => setSettingsPanelOpen((prev) => !prev)}
+          aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
+          title={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
+        >
+          {settingsPanelOpen ? '◀' : '▶'}
+        </button>
+        <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
           <h2>Beállítások</h2>
 
           <label>
@@ -386,53 +471,48 @@ function App() {
             </select>
           </label>
 
-          <label>
-            Extra szünnapok (1 sor = YYYY-MM-DD)
-            <textarea
-              value={extraOffDaysText}
-              onChange={(e) => {
-                const value = e.target.value
-                setExtraOffDaysText(value)
-                setMonthOffDaysByMonth((prev) => ({
-                  ...prev,
-                  [monthValue]: value,
-                }))
-              }}
-              placeholder="2026-02-13"
-              rows={4}
-            />
-          </label>
+          <details className="collapsible-box">
+            <summary>Extra szünnapok (1 sor = YYYY-MM-DD)</summary>
+            <label>
+              Dátumok
+              <textarea
+                value={extraOffDaysText}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setExtraOffDaysText(value)
+                  setMonthOffDaysByMonth((prev) => ({
+                    ...prev,
+                    [monthValue]: value,
+                  }))
+                }}
+                placeholder="2026-02-13"
+                rows={4}
+              />
+            </label>
+          </details>
 
-          <label>
-            Névsor (1 sor = 1 név)
-            <textarea
-              value={childrenText}
-              onChange={(e) => setChildrenText(e.target.value)}
-              rows={10}
-            />
-          </label>
+          <details className="collapsible-box">
+            <summary>Névsor (1 sor = 1 név)</summary>
+            <label>
+              Gyerekek
+              <textarea
+                className="roster-textarea"
+                value={childrenText}
+                onChange={(e) => setChildrenText(e.target.value)}
+                rows={7}
+              />
+            </label>
+          </details>
 
           <div className="stats">
             <p>
               Munkanapok: <strong>{workingDays.length}</strong>
             </p>
-            <p>
-              Következő hónap induló neve: <strong>{monthResult.nextStartChild || '-'}</strong>
-            </p>
-            <button type="button" onClick={goToPreviousMonth}>
-              Előző hónap
-            </button>
-            <button type="button" onClick={continueWithNextMonth}>
-              Folytatás a következő hónappal
-            </button>
-            <button type="button" onClick={downloadPdf}>
-              Nyomtatás / PDF letöltés
-            </button>
-            <button type="button" onClick={downloadJpg}>
-              JPG letöltés
-            </button>
+          </div>
+          <details className="collapsible-box" open={Boolean(headerImage)}>
+            <summary>Fejléckép (referencia designhoz)</summary>
             <label>
-              Fejléckép (referencia designhoz)
+              Kép feltöltése
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
@@ -458,93 +538,102 @@ function App() {
               />
             </label>
             {headerImage ? (
-              <div className="image-preview">
-                <p>Fejléckép beállítva:</p>
-                <img src={headerImage.dataUrl} alt="Fejléckép előnézet" />
-                <p>{`Utolsó frissítés: ${new Date(headerImage.updatedAt).toLocaleString('hu-HU')}`}</p>
-              </div>
+              <>
+                <div className="image-preview">
+                  <p>Fejléckép beállítva:</p>
+                  <img src={headerImage.dataUrl} alt="Fejléckép előnézet" />
+                  <p>{`Utolsó frissítés: ${new Date(headerImage.updatedAt).toLocaleString('hu-HU')}`}</p>
+                </div>
+                <button
+                  type="button"
+                  className="action-button secondary"
+                  onClick={() => {
+                    setHeaderImage(null)
+                    localStorage.removeItem('fruit-calendar-header-image')
+                  }}
+                >
+                  <span>🗑️</span> Fejléckép törlése
+                </button>
+              </>
             ) : (
-              <p>Nincs fejléckép betöltve.</p>
+              <p className="compact-note">Nincs fejléckép betöltve.</p>
             )}
-            {headerImage ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setHeaderImage(null)
-                  localStorage.removeItem('fruit-calendar-header-image')
-                }}
-              >
-                Fejléckép törlése
-              </button>
-            ) : null}
-          </div>
+          </details>
         </aside>
 
-        <section className="panel calendar-panel">
-          <h2>{monthLabel(year, monthIndex)}</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Dátum</th>
-                {weekdays.map((day) => (
-                  <th key={day}>{day}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {weeks.map((week, weekIdx) => (
-                <tr key={`week-${weekIdx}`}>
-                  <td className="week-label">{weekLabel(week, year, monthIndex)}</td>
-                  {weekdays.map((_, idx) => {
-                    const item = week.find((entry) => entry.date.getDay() === idx + 1)
-                    if (!item) {
-                      return <td key={`empty-${weekIdx}-${idx}`} className="empty"></td>
-                    }
-                    return (
-                      <td key={item.dateKey}>
-                        <div className="day">{item.date.getDate()}</div>
-                        <select
-                          value={item.child}
-                          onChange={(e) => updateOverride(item.dateKey, e.target.value)}
-                        >
-                          {children.map((name) => (
-                            <option key={`${item.dateKey}-${name}`} value={name}>
-                              {name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    )
-                  })}
+        <div className="main-column">
+          <section className="panel calendar-panel">
+            <h2>{monthLabel(year, monthIndex)}</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Dátum</th>
+                  {weekdays.map((day) => (
+                    <th key={day}>{day}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </section>
+              </thead>
+              <tbody>
+                {weeks.map((week, weekIdx) => (
+                  <tr key={`week-${weekIdx}`}>
+                    <td className="week-label">{weekLabel(week, year, monthIndex)}</td>
+                    {weekdays.map((_, idx) => {
+                      const item = week.find((entry) => entry.date.getDay() === idx + 1)
+                      if (!item) {
+                        return <td key={`empty-${weekIdx}-${idx}`} className="empty"></td>
+                      }
+                      return (
+                        <td key={item.dateKey}>
+                          <div className="day">{item.date.getDate()}</div>
+                          <select
+                            value={item.child}
+                            onChange={(e) => updateOverride(item.dateKey, e.target.value)}
+                          >
+                            {children.map((name) => (
+                              <option key={`${item.dateKey}-${name}`} value={name}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="calendar-actions">
+              <button type="button" className="action-button" onClick={goToPreviousMonth}>
+                <span>◀</span> Előző hónap
+              </button>
+              <button type="button" className="action-button" onClick={continueWithNextMonth}>
+                <span>▶</span> Folytatás a következő hónappal
+              </button>
+              <button type="button" className="action-button" onClick={downloadPdf}>
+                <span>🧾</span> Nyomtatás / PDF letöltés
+              </button>
+              <button type="button" className="action-button" onClick={downloadJpg}>
+                <span>🖼️</span> JPG letöltés
+              </button>
+            </div>
+            <div className="inline-info">
+              <p>
+                Következő hónap induló neve: <strong>{monthResult.nextStartChild || '-'}</strong>
+              </p>
+            </div>
+          </section>
 
-      <section className="panel test-panel">
-        <h2>Február -&gt; Március folytatás teszt</h2>
-        <p>
-          Február után a következő induló név: <strong>{monthResult.nextStartChild || '-'}</strong>
-        </p>
-        <p>
-          Március első kiosztott napja: <strong>{marchTestData.assignments[0]?.child || '-'}</strong>
-        </p>
-        <p>
-          Ha a két név egyezik, a folytatás logika jól működik.
-        </p>
-      </section>
-
-      <section className="panel preview-panel">
-        <h2>Nyomtatási előnézet</h2>
-        <p>Ez fixen azt mutatja, ami PDF/JPG exportban megjelenik.</p>
-        <iframe
-          title="Nyomtatási előnézet"
-          className="print-preview-frame"
-          sandbox=""
-          srcDoc={printPreviewHtml}
-        />
+          <section className="panel preview-panel">
+            <h2>Nyomtatási előnézet</h2>
+            <p>Ez fixen azt mutatja, ami PDF/JPG exportban megjelenik.</p>
+            <iframe
+              title="Nyomtatási előnézet"
+              className="print-preview-frame"
+              sandbox=""
+              srcDoc={printPreviewHtml}
+            />
+          </section>
+        </div>
       </section>
 
     </main>
