@@ -45,7 +45,7 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.1.0-local'
+const APP_VERSION = 'v1.1.1'
 
 type HeaderImageState = {
   dataUrl: string
