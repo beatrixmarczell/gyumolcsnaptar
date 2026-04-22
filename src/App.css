@@ -1,0 +1,206 @@
+.app {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.title h1 {
+  margin: 0 0 8px;
+}
+
+.title p {
+  margin: 0;
+  color: #555;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  padding: 8px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  background: #e9f1ff;
+  cursor: pointer;
+}
+
+.stats p {
+  margin: 6px 0;
+}
+
+.image-preview {
+  margin-top: 8px;
+}
+
+.image-preview p {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.image-preview img {
+  width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid #c8c8c8;
+  vertical-align: top;
+  padding: 6px;
+}
+
+th {
+  background: #e8e8e8;
+}
+
+.week-label {
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.day {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+td select {
+  width: 100%;
+}
+
+.empty {
+  background: #f3f6fa;
+}
+
+.test-panel p {
+  margin: 6px 0;
+}
+
+.preview-panel p {
+  margin: 0 0 10px;
+}
+
+.print-preview-frame {
+  width: 100%;
+  height: 760px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .title,
+  .layout,
+  .test-panel {
+    display: none;
+  }
+
+  .app {
+    display: block;
+    padding: 0;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  .print-title {
+    text-align: center;
+    font-size: 34px;
+    margin: 0 0 14px;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .print-table th,
+  .print-table td {
+    border: 1px solid #555;
+    padding: 6px 8px;
+  }
+
+  .print-table th {
+    background: #e4e4e4;
+    text-align: center;
+    font-size: 18px;
+  }
+
+  .print-week-label {
+    width: 19%;
+    font-weight: 700;
+    color: #0057a3;
+    vertical-align: middle;
+  }
+
+  .print-day-number {
+    text-align: center;
+    background: #ececec;
+    font-weight: 700;
+    min-height: 36px;
+  }
+
+  .print-child-name {
+    text-align: center;
+    background: #f4e9dd;
+    font-weight: 700;
+    min-height: 54px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
