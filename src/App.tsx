@@ -45,7 +45,7 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.1.1'
+const APP_VERSION = 'v1.2.0'
 
 type HeaderImageState = {
   dataUrl: string
@@ -400,28 +400,28 @@ function App() {
     <main className={`app theme-${uiTheme} ${darkMode ? 'dark-mode' : ''}`}>
       <header className="title">
         <div className="title-row">
-          <div>
-            <h1>Gyümölcsnaptár MVP</h1>
-            <p>Első teszt: Február 2026, kezdő gyerek: Petrilla Ádám</p>
-            <p>{`Aktív PDF sablon: ${PDF_TEMPLATE_VERSION}`}</p>
-            <p className="app-version">{`App verzió: ${APP_VERSION}`}</p>
-          </div>
-          <div className="ui-controls">
-            <label className="inline-control">
-              Téma
-              <select value={uiTheme} onChange={(e) => setUiTheme(e.target.value as 'elegant' | 'pastel' | 'minimal')}>
-                <option value="elegant">Elegant</option>
-                <option value="pastel">Pasztell</option>
-                <option value="minimal">Minimal</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              className="toggle-button"
-              onClick={() => setDarkMode((prev) => !prev)}
-            >
-              {darkMode ? '☀️ Világos mód' : '🌙 Sötét mód'}
-            </button>
+          <h1 className="app-title">Gyümölcsnaptár</h1>
+          <div className="title-end">
+            <span className="app-version-discrete" title="Alkalmazás verziója">
+              {APP_VERSION}
+            </span>
+            <div className="ui-controls">
+              <label className="inline-control">
+                Téma
+                <select value={uiTheme} onChange={(e) => setUiTheme(e.target.value as 'elegant' | 'pastel' | 'minimal')}>
+                  <option value="elegant">Elegant</option>
+                  <option value="pastel">Pasztell</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="toggle-button"
+                onClick={() => setDarkMode((prev) => !prev)}
+              >
+                {darkMode ? '☀️ Világos mód' : '🌙 Sötét mód'}
+              </button>
+            </div>
           </div>
         </div>
       </header>
