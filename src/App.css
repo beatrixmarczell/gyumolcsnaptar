@@ -184,6 +184,38 @@
   user-select: none;
 }
 
+.cloud-pill {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-soft);
+  max-width: 14rem;
+  line-height: 1.2;
+  text-align: right;
+  opacity: 0.9;
+}
+
+.cloud-pill--ok {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.cloud-pill--err {
+  color: #9f1239;
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+.cloud-pill--loading {
+  opacity: 0.8;
+}
+
 .layout {
   --sidebar-width: 230px;
   display: grid;

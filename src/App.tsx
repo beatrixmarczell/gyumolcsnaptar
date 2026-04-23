@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   addOneMonth,
@@ -7,6 +7,9 @@ import {
   monthLabel,
   toDateKey,
 } from './calendar'
+import type { HeaderImageState } from './lib/cloudTypes'
+import { isCloudSyncAvailable } from './lib/supabaseClient'
+import { applyAppStatePayload, buildAppStatePayload, fetchGroupState, saveGroupState } from './lib/supabaseState'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -45,14 +48,10 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.2.0'
+const APP_VERSION = 'v1.3.0'
 
-type HeaderImageState = {
-  dataUrl: string
-  width: number
-  height: number
-  updatedAt: number
-}
+const CLOUD_SYNC = isCloudSyncAvailable()
+const CLOUD_SAVE_DEBOUNCE_MS = 1000
 
 function fromMonthInputValue(value: string): { year: number; monthIndex: number } {
   const [yearText, monthText] = value.split('-')
@@ -163,6 +162,87 @@ function App() {
     }
     return stored === 'true'
   })
+  const [cloudStatus, setCloudStatus] = useState<'off' | 'loading' | 'ok' | 'err'>(() => {
+    return CLOUD_SYNC ? 'loading' : 'off'
+  })
+  const [canSaveToCloud, setCanSaveToCloud] = useState(!CLOUD_SYNC)
+  const cloudBootstrapStarted = useRef(false)
+
+  useEffect(() => {
+    if (!CLOUD_SYNC) {
+      return
+    }
+    if (cloudBootstrapStarted.current) {
+      return
+    }
+    cloudBootstrapStarted.current = true
+    const run = async (): Promise<void> => {
+      setCloudStatus('loading')
+      try {
+        const remote = await fetchGroupState()
+        if (remote) {
+          applyAppStatePayload(remote, {
+            setChildrenText,
+            setMonthValue,
+            setStartChildByMonth,
+            setMonthOffDaysByMonth,
+            setManualOverridesByMonth,
+            setHeaderImage,
+            setUiTheme,
+            setDarkMode,
+            setSettingsPanelOpen,
+            setStartChild,
+            setExtraOffDaysText,
+            setManualOverrides,
+          })
+        }
+        setCloudStatus('ok')
+      } catch (e) {
+        console.error('Felhő betöltés:', e)
+        setCloudStatus('err')
+      } finally {
+        setCanSaveToCloud(true)
+      }
+    }
+    void run()
+  }, [])
+
+  useEffect(() => {
+    if (!CLOUD_SYNC || !canSaveToCloud) {
+      return
+    }
+    const payload = buildAppStatePayload({
+      childrenText,
+      monthValue,
+      startChildByMonth,
+      monthOffDaysByMonth,
+      manualOverridesByMonth,
+      headerImage,
+      uiTheme,
+      darkMode,
+      settingsPanelOpen,
+    })
+    const timer = setTimeout(() => {
+      void saveGroupState(payload)
+        .then(() => setCloudStatus('ok'))
+        .catch((e) => {
+          console.error('Felhő mentés:', e)
+          setCloudStatus('err')
+        })
+    }, CLOUD_SAVE_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [
+    childrenText,
+    monthValue,
+    startChildByMonth,
+    monthOffDaysByMonth,
+    manualOverridesByMonth,
+    headerImage,
+    uiTheme,
+    darkMode,
+    settingsPanelOpen,
+    canSaveToCloud,
+  ])
 
   useEffect(() => {
     setExtraOffDaysText(monthOffDaysByMonth[monthValue] ?? '')
@@ -405,6 +485,17 @@ function App() {
             <span className="app-version-discrete" title="Alkalmazás verziója">
               {APP_VERSION}
             </span>
+            {CLOUD_SYNC ? (
+              <span
+                className={`cloud-pill cloud-pill--${cloudStatus === 'ok' ? 'ok' : cloudStatus === 'err' ? 'err' : 'loading'}`}
+                title="Közös adat a Supabase felhőben. Mindenki, aki a linket használja, ugyanazt a mentést látja."
+              >
+                {cloudStatus === 'loading' && 'Felhő: betöltés…'}
+                {cloudStatus === 'ok' && 'Felhő: mentve (közös)'}
+                {cloudStatus === 'err' && 'Felhő: hiba'}
+                {cloudStatus === 'off' && 'Felhő: —'}
+              </span>
+            ) : null}
             <div className="ui-controls">
               <label className="inline-control">
                 Téma
