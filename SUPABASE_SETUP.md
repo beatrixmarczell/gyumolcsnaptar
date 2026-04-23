@@ -11,7 +11,8 @@ A webalkalmazás a **Supabase** PostgreSQL adatbázisában tartja a naptár áll
 
 1. A projektben: **SQL Editor** → New query
 2. Másold be a `supabase/migrations/20260215120000_init.sql` fájl teljes tartalmát, majd **Run**
-3. Ellenőrzés: **Table Editor** alatt látod: `organizations`, `groups`, `group_calendar_state`  
+3. Ezután futtasd a `supabase/migrations/20260423090000_keycloak_auth.sql` migrationt is.
+4. Ellenőrzés: **Table Editor** alatt látod: `organizations`, `groups`, `group_calendar_state`, `user_profiles`, `group_memberships`  
    A demo ovi + demo csoport egy sor már létrejött.
 
 ## 3. Kliens kulcs (anon)
@@ -42,9 +43,8 @@ A `.github/workflows/deploy-pages.yml` már ezekre hivatkozik.
 
 ## 6. Biztonság (fontos!)
 
-- Az **anon** kulcs a böngészőben is látandó, ezért a **jelenlegi** RLS szabály *mindenkinek* enged irni/olvasni, aki tudja a project URL-t + kulcsot.
-- Tömeges használatnál, ovihoz: **később** érdemes: bejelentkezés, csak a saját csoport sorának írása, stb.  
-  Ez a sémastruktúra (ovi → csoport → `group_calendar_state`) már kész erre.
+- A korábbi anon írható működést a Keycloak rollout lezárja: közvetlen anon írás tiltva van.
+- A mentés/olvasás a `keycloak-gateway` Edge Functionön keresztül történik (lásd `KEYCLOAK_SETUP.md`).
 
 ## 7. Új ovi vagy csoport (később)
 

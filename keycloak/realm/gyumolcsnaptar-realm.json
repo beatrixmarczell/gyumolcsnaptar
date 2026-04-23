@@ -1,0 +1,61 @@
+{
+  "realm": "gyumolcsnaptar",
+  "enabled": true,
+  "displayName": "Gyumolcsnaptar",
+  "roles": {
+    "realm": [
+      { "name": "admin" },
+      { "name": "editor" },
+      { "name": "viewer" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "gyumolcsnaptar-web",
+      "name": "Gyumolcsnaptar Web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:5174/*",
+        "https://*.github.io/*"
+      ],
+      "webOrigins": ["+"]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@example.com",
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "editor.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "editor@example.com",
+      "firstName": "Demo",
+      "lastName": "Editor",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["editor"]
+    },
+    {
+      "username": "viewer.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "viewer@example.com",
+      "firstName": "Demo",
+      "lastName": "Viewer",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["viewer"]
+    }
+  ]
+}

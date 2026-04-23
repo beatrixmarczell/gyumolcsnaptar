@@ -1,5 +1,11 @@
-import { APP_STATE_SCHEMA_VERSION, type AppStatePayload, type HeaderImageState } from './cloudTypes'
-import { getDefaultGroupId, getSupabase } from './supabaseClient'
+import {
+  APP_STATE_SCHEMA_VERSION,
+  type AppStatePayload,
+  type AppUserRole,
+  type CloudLoadResult,
+  type HeaderImageState,
+} from './cloudTypes'
+import { getDefaultGroupId, getFunctionUrl, getSupabase, isKeycloakAuthEnabled } from './supabaseClient'
 
 const HEADER_KEY = 'fruit-calendar-header-image'
 
@@ -89,11 +95,53 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
   }
 }
 
-export async function fetchGroupState(): Promise<AppStatePayload | null> {
+async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadResult> {
+  const endpoint = getFunctionUrl('keycloak-gateway')
+  const groupId = getDefaultGroupId()
+  if (!endpoint || !groupId) {
+    throw new Error('A keycloak-gateway endpoint nincs konfigurálva.')
+  }
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ action: 'load', groupId }),
+  })
+  const json = (await response.json()) as {
+    payload?: unknown
+    role?: AppUserRole
+    displayName?: string | null
+    error?: string
+  }
+
+  if (!response.ok) {
+    throw new Error(json.error ?? 'Sikertelen felhő lekérés.')
+  }
+  const payload = json.payload ? parseAppStatePayload(json.payload) : null
+  return {
+    payload,
+    role: json.role ?? 'viewer',
+    displayName: json.displayName ?? null,
+  }
+}
+
+export async function fetchGroupState(params?: {
+  accessToken?: string | null
+}): Promise<CloudLoadResult> {
+  const keycloakMode = isKeycloakAuthEnabled()
+  if (keycloakMode) {
+    if (!params?.accessToken) {
+      return { payload: null, role: 'viewer', displayName: null }
+    }
+    return fetchViaKeycloakGateway(params.accessToken)
+  }
+
   const supabase = getSupabase()
   const groupId = getDefaultGroupId()
   if (!supabase || !groupId) {
-    return null
+    return { payload: null, role: 'admin', displayName: null }
   }
   const { data, error } = await supabase
     .from('group_calendar_state')
@@ -104,13 +152,45 @@ export async function fetchGroupState(): Promise<AppStatePayload | null> {
   if (error) {
     throw new Error(`Supabase lekérés: ${error.message}`)
   }
-  if (!data?.payload) {
-    return null
+  return {
+    payload: data?.payload ? parseAppStatePayload(data.payload) : null,
+    role: 'admin',
+    displayName: null,
   }
-  return parseAppStatePayload(data.payload)
 }
 
-export async function saveGroupState(payload: AppStatePayload): Promise<void> {
+export async function saveGroupState(
+  payload: AppStatePayload,
+  params?: { accessToken?: string | null; role?: AppUserRole },
+): Promise<void> {
+  const keycloakMode = isKeycloakAuthEnabled()
+  if (keycloakMode) {
+    if (!params?.accessToken) {
+      return
+    }
+    if (params.role === 'viewer') {
+      return
+    }
+    const endpoint = getFunctionUrl('keycloak-gateway')
+    const groupId = getDefaultGroupId()
+    if (!endpoint || !groupId) {
+      return
+    }
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${params.accessToken}`,
+      },
+      body: JSON.stringify({ action: 'save', groupId, payload }),
+    })
+    if (!response.ok) {
+      const json = (await response.json().catch(() => ({}))) as { error?: string }
+      throw new Error(json.error ?? 'Sikertelen felhő mentés.')
+    }
+    return
+  }
+
   const supabase = getSupabase()
   const groupId = getDefaultGroupId()
   if (!supabase || !groupId) {
@@ -150,7 +230,7 @@ function persistHeaderToLocalStorage(header: HeaderImageState | null): void {
  * hónap / szülő állapotot.
  */
 export function applyAppStatePayload(
-  p: AppStatePayload,
+  result: CloudLoadResult,
   setters: {
     setChildrenText: (v: string) => void
     setMonthValue: (v: string) => void
@@ -166,6 +246,10 @@ export function applyAppStatePayload(
     setManualOverrides: (v: Record<string, string>) => void
   },
 ): void {
+  const p = result.payload
+  if (!p) {
+    return
+  }
   const {
     setChildrenText,
     setMonthValue,

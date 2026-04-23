@@ -9,11 +9,16 @@ export type GroupCalendarStateRow = {
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined)?.toLowerCase() ?? 'none'
 
 let client: SupabaseClient | null = null
 
 export function isSupabaseConfigured(): boolean {
   return Boolean(url && anon && String(url).startsWith('http'))
+}
+
+export function getSupabaseUrl(): string | null {
+  return isSupabaseConfigured() && url ? url : null
 }
 
 export function getDefaultGroupId(): string | null {
@@ -38,4 +43,19 @@ export function getSupabase(): SupabaseClient | null {
 
 export function isCloudSyncAvailable(): boolean {
   return isSupabaseConfigured() && getDefaultGroupId() !== null
+}
+
+export function getAuthMode(): 'none' | 'keycloak' {
+  return authMode === 'keycloak' ? 'keycloak' : 'none'
+}
+
+export function isKeycloakAuthEnabled(): boolean {
+  return getAuthMode() === 'keycloak'
+}
+
+export function getFunctionUrl(functionName: string): string | null {
+  if (!url) {
+    return null
+  }
+  return `${url}/functions/v1/${functionName}`
 }

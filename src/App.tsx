@@ -7,8 +7,9 @@ import {
   monthLabel,
   toDateKey,
 } from './calendar'
-import type { HeaderImageState } from './lib/cloudTypes'
-import { isCloudSyncAvailable } from './lib/supabaseClient'
+import type { AppUserRole, HeaderImageState } from './lib/cloudTypes'
+import { getAccessToken, initAuth, isKeycloakConfigured, login, logout } from './lib/auth/keycloakAuth'
+import { isCloudSyncAvailable, isKeycloakAuthEnabled } from './lib/supabaseClient'
 import { applyAppStatePayload, buildAppStatePayload, fetchGroupState, saveGroupState } from './lib/supabaseState'
 
 const defaultChildren = [
@@ -48,9 +49,10 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.3.2'
+const APP_VERSION = 'v1.4.0'
 
 const CLOUD_SYNC = isCloudSyncAvailable()
+const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
 
 function fromMonthInputValue(value: string): { year: number; monthIndex: number } {
@@ -166,10 +168,44 @@ function App() {
     return CLOUD_SYNC ? 'loading' : 'off'
   })
   const [canSaveToCloud, setCanSaveToCloud] = useState(!CLOUD_SYNC)
+  const [authReady, setAuthReady] = useState(!KEYCLOAK_AUTH)
+  const [isAuthenticated, setIsAuthenticated] = useState(!KEYCLOAK_AUTH)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
   const cloudBootstrapStarted = useRef(false)
+
+  const canEdit = !KEYCLOAK_AUTH || userRole === 'admin' || userRole === 'editor'
+
+  useEffect(() => {
+    if (!KEYCLOAK_AUTH) {
+      return
+    }
+    const run = async (): Promise<void> => {
+      const session = await initAuth()
+      setAuthReady(true)
+      setIsAuthenticated(session.authenticated)
+      setUserDisplayName(session.displayName ?? session.email)
+      if (!session.authenticated) {
+        setCloudStatus('off')
+        setCanSaveToCloud(false)
+        return
+      }
+      const token = (await getAccessToken()) ?? session.token
+      setAccessToken(token ?? null)
+    }
+    void run()
+  }, [])
 
   useEffect(() => {
     if (!CLOUD_SYNC) {
+      return
+    }
+    if (KEYCLOAK_AUTH && !authReady) {
+      return
+    }
+    if (KEYCLOAK_AUTH && (!isAuthenticated || !accessToken)) {
+      setCloudStatus('off')
       return
     }
     if (cloudBootstrapStarted.current) {
@@ -179,8 +215,12 @@ function App() {
     const run = async (): Promise<void> => {
       setCloudStatus('loading')
       try {
-        const remote = await fetchGroupState()
-        if (remote) {
+        const remote = await fetchGroupState({ accessToken })
+        setUserRole(remote.role)
+        if (remote.displayName) {
+          setUserDisplayName(remote.displayName)
+        }
+        if (remote.payload) {
           applyAppStatePayload(remote, {
             setChildrenText,
             setMonthValue,
@@ -205,10 +245,13 @@ function App() {
       }
     }
     void run()
-  }, [])
+  }, [authReady, isAuthenticated, accessToken])
 
   useEffect(() => {
     if (!CLOUD_SYNC || !canSaveToCloud) {
+      return
+    }
+    if (KEYCLOAK_AUTH && (!isAuthenticated || !accessToken || !canEdit)) {
       return
     }
     const payload = buildAppStatePayload({
@@ -223,7 +266,7 @@ function App() {
       settingsPanelOpen,
     })
     const timer = setTimeout(() => {
-      void saveGroupState(payload)
+      void saveGroupState(payload, { accessToken, role: userRole })
         .then(() => setCloudStatus('ok'))
         .catch((e) => {
           console.error('Felhő mentés:', e)
@@ -242,6 +285,10 @@ function App() {
     darkMode,
     settingsPanelOpen,
     canSaveToCloud,
+    isAuthenticated,
+    accessToken,
+    userRole,
+    canEdit,
   ])
 
   useEffect(() => {
@@ -476,6 +523,14 @@ function App() {
     }
   }
 
+  const doLogin = (): void => {
+    void login()
+  }
+
+  const doLogout = (): void => {
+    void logout()
+  }
+
   return (
     <main className={`app theme-${uiTheme} ${darkMode ? 'dark-mode' : ''}`}>
       <header className="title">
@@ -496,6 +551,15 @@ function App() {
                 {cloudStatus === 'off' && 'Felhő: —'}
               </span>
             ) : null}
+            {KEYCLOAK_AUTH ? (
+              <span className="cloud-pill" title="Bejelentkezett felhasználó szerepkörrel.">
+                {authReady
+                  ? isAuthenticated
+                    ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})`
+                    : 'Felhasználó: nincs bejelentkezve'
+                  : 'Felhasználó: ellenőrzés…'}
+              </span>
+            ) : null}
             <div className="ui-controls">
               <label className="inline-control">
                 Téma
@@ -512,12 +576,39 @@ function App() {
               >
                 {darkMode ? '☀️ Világos mód' : '🌙 Sötét mód'}
               </button>
+              {KEYCLOAK_AUTH ? (
+                isAuthenticated ? (
+                  <button type="button" className="toggle-button" onClick={doLogout}>
+                    Kijelentkezés
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="toggle-button"
+                    onClick={doLogin}
+                    disabled={!isKeycloakConfigured()}
+                  >
+                    Bejelentkezés
+                  </button>
+                )
+              ) : null}
             </div>
           </div>
         </div>
       </header>
 
-      <section className={`layout ${settingsPanelOpen ? '' : 'sidebar-collapsed'}`}>
+      {KEYCLOAK_AUTH && authReady && !isAuthenticated ? (
+        <section className="panel inline-info">
+          <h2>Bejelentkezés szükséges</h2>
+          <p>A naptár megtekintéséhez és közös mentéshez jelentkezz be Keycloakkal.</p>
+          <button type="button" className="action-button" onClick={doLogin} disabled={!isKeycloakConfigured()}>
+            Bejelentkezés Keycloakkal
+          </button>
+        </section>
+      ) : null}
+
+      {!KEYCLOAK_AUTH || isAuthenticated ? (
+        <section className={`layout ${settingsPanelOpen ? '' : 'sidebar-collapsed'}`}>
         <button
           type="button"
           className="sidebar-toggle"
@@ -535,6 +626,7 @@ function App() {
             <input
               type="month"
               value={monthValue}
+              disabled={!canEdit}
               onChange={(e) => {
                 setMonthValue(e.target.value)
               }}
@@ -545,6 +637,7 @@ function App() {
             Kezdő gyerek
             <select
               value={startChild}
+              disabled={!canEdit}
               onChange={(e) => {
                 const value = e.target.value
                 setStartChild(value)
@@ -568,6 +661,7 @@ function App() {
               Dátumok
               <textarea
                 value={extraOffDaysText}
+                disabled={!canEdit}
                 onChange={(e) => {
                   const value = e.target.value
                   setExtraOffDaysText(value)
@@ -589,6 +683,7 @@ function App() {
               <textarea
                 className="roster-textarea"
                 value={childrenText}
+                disabled={!canEdit}
                 onChange={(e) => setChildrenText(e.target.value)}
                 rows={7}
               />
@@ -607,6 +702,7 @@ function App() {
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
+                disabled={!canEdit}
                 onChange={async (e) => {
                   const file = e.target.files?.[0]
                   if (!file) {
@@ -638,6 +734,7 @@ function App() {
                 <button
                   type="button"
                   className="action-button secondary"
+                  disabled={!canEdit}
                   onClick={() => {
                     setHeaderImage(null)
                     localStorage.removeItem('fruit-calendar-header-image')
@@ -678,6 +775,7 @@ function App() {
                           <div className="day">{item.date.getDate()}</div>
                           <select
                             value={item.child}
+                            disabled={!canEdit}
                             onChange={(e) => updateOverride(item.dateKey, e.target.value)}
                           >
                             {children.map((name) => (
@@ -725,7 +823,8 @@ function App() {
             />
           </section>
         </div>
-      </section>
+        </section>
+      ) : null}
 
     </main>
   )

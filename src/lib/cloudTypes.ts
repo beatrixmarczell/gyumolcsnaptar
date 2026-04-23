@@ -7,6 +7,8 @@ export type HeaderImageState = {
 
 export const APP_STATE_SCHEMA_VERSION = 1 as const
 
+export type AppUserRole = 'admin' | 'editor' | 'viewer'
+
 export type AppStatePayload = {
   schemaVersion: typeof APP_STATE_SCHEMA_VERSION
   childrenText: string
@@ -18,4 +20,10 @@ export type AppStatePayload = {
   uiTheme: 'elegant' | 'pastel' | 'minimal'
   darkMode: boolean
   settingsPanelOpen: boolean
+}
+
+export type CloudLoadResult = {
+  payload: AppStatePayload | null
+  role: AppUserRole
+  displayName: string | null
 }
