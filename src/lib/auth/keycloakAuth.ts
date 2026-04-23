@@ -82,10 +82,8 @@ export async function initAuth(): Promise<AuthSession> {
 
   initPromise = keycloak
     .init({
-      onLoad: 'check-sso',
       pkceMethod: 'S256',
       checkLoginIframe: false,
-      silentCheckSsoFallback: false,
     })
     .then((authenticated) => {
       if (authenticated) {
