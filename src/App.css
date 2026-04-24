@@ -169,7 +169,7 @@
 .title-end {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
 }
 
@@ -184,7 +184,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 2px;
 }
 
 .app-version-discrete {
@@ -829,7 +829,7 @@ td select {
   display: grid;
   justify-items: start;
   text-align: left;
-  min-width: 140px;
+  min-width: 0;
 }
 
 .inline-control select {
@@ -1083,6 +1083,14 @@ input[type='file'] {
     align-items: flex-end;
     justify-self: end;
     gap: 6px;
+  }
+
+  .appearance-control {
+    align-self: flex-start;
+  }
+
+  .title-meta {
+    align-self: flex-end;
   }
 
   .cloud-pill {
