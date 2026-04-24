@@ -176,7 +176,7 @@
 
 .title-start {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -626,8 +626,9 @@ td select {
 
 .ui-controls {
   display: grid;
-  gap: 6px;
-  min-width: 190px;
+  gap: 4px;
+  min-width: 150px;
+  justify-items: end;
 }
 
 .inline-control {
@@ -635,12 +636,27 @@ td select {
   font-size: 0.76rem;
 }
 
+.compact-control {
+  min-width: 150px;
+}
+
 .inline-control select {
-  min-width: 140px;
+  min-width: 150px;
+  padding: 6px 8px;
+  font-size: 0.75rem;
 }
 
 .toggle-button {
   white-space: nowrap;
+}
+
+.login-button-compact {
+  width: auto;
+  min-width: 0;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  opacity: 0.9;
 }
 
 .action-button {
@@ -797,6 +813,7 @@ input[type='file'] {
 
   .title-start {
     width: 100%;
+    align-items: stretch;
   }
 
   .ui-controls {

@@ -207,6 +207,7 @@ function App() {
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   const canEdit =
     isLocalDevHost || (KEYCLOAK_AUTH && isAuthenticated && (userRole === 'admin' || userRole === 'editor'))
+  const themeModeValue = `${uiTheme}:${darkMode ? 'dark' : 'light'}`
   const { year, monthIndex } = fromMonthInputValue(monthValue)
 
   useEffect(() => {
@@ -648,11 +649,26 @@ function App() {
       <header className="title">
         <div className="title-row">
           <div className="title-start">
-            {KEYCLOAK_AUTH && !isAuthenticated ? (
-              <button type="button" className="action-button" onClick={doLogin} disabled={!isKeycloakConfigured()}>
-                Bejelentkezés
-              </button>
-            ) : null}
+            <label className="inline-control compact-control">
+              Megjelenés
+              <select
+                value={themeModeValue}
+                onChange={(e) => {
+                  const [nextTheme, mode] = e.target.value.split(':')
+                  if (nextTheme === 'elegant' || nextTheme === 'pastel' || nextTheme === 'minimal') {
+                    setUiTheme(nextTheme)
+                  }
+                  setDarkMode(mode === 'dark')
+                }}
+              >
+                <option value="elegant:light">Elegant - Világos</option>
+                <option value="elegant:dark">Elegant - Sötét</option>
+                <option value="pastel:light">Pasztell - Világos</option>
+                <option value="pastel:dark">Pasztell - Sötét</option>
+                <option value="minimal:light">Minimal - Világos</option>
+                <option value="minimal:dark">Minimal - Sötét</option>
+              </select>
+            </label>
             <h1 className="app-title">Gyümölcsnaptár</h1>
           </div>
           <div className="title-end">
@@ -680,21 +696,16 @@ function App() {
               </span>
             ) : null}
             <div className="ui-controls">
-              <label className="inline-control">
-                Téma
-                <select value={uiTheme} onChange={(e) => setUiTheme(e.target.value as 'elegant' | 'pastel' | 'minimal')}>
-                  <option value="elegant">Elegant</option>
-                  <option value="pastel">Pasztell</option>
-                  <option value="minimal">Minimal</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className="toggle-button"
-                onClick={() => setDarkMode((prev) => !prev)}
-              >
-                {darkMode ? '☀️ Világos mód' : '🌙 Sötét mód'}
-              </button>
+              {KEYCLOAK_AUTH && !isAuthenticated ? (
+                <button
+                  type="button"
+                  className="login-button-compact"
+                  onClick={doLogin}
+                  disabled={!isKeycloakConfigured()}
+                >
+                  Bejelentkezés
+                </button>
+              ) : null}
               {KEYCLOAK_AUTH && isAuthenticated ? (
                 <button type="button" className="toggle-button" onClick={doLogout}>
                   Kijelentkezés
