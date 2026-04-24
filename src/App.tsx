@@ -54,7 +54,7 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.5.0'
+const APP_VERSION = 'v1.5.1'
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -649,28 +649,6 @@ function App() {
       <header className="title">
         <div className="title-row">
           <div className="title-start">
-            <label className="inline-control compact-control">
-              Megjelenés
-              <select
-                value={themeModeValue}
-                onChange={(e) => {
-                  const selected = e.target.value
-                  if (selected === 'dark') {
-                    setDarkMode(true)
-                    return
-                  }
-                  if (selected === 'elegant' || selected === 'pastel' || selected === 'minimal') {
-                    setUiTheme(selected)
-                    setDarkMode(false)
-                  }
-                }}
-              >
-                <option value="elegant">Elegant</option>
-                <option value="pastel">Pasztell</option>
-                <option value="minimal">Minimal</option>
-                <option value="dark">Sötét</option>
-              </select>
-            </label>
             <h1 className="app-title">Gyümölcsnaptár</h1>
           </div>
           <div className="title-end">
@@ -698,6 +676,28 @@ function App() {
               </span>
             ) : null}
             <div className="ui-controls">
+              <label className="inline-control compact-control">
+                Megjelenés
+                <select
+                  value={themeModeValue}
+                  onChange={(e) => {
+                    const selected = e.target.value
+                    if (selected === 'dark') {
+                      setDarkMode(true)
+                      return
+                    }
+                    if (selected === 'elegant' || selected === 'pastel' || selected === 'minimal') {
+                      setUiTheme(selected)
+                      setDarkMode(false)
+                    }
+                  }}
+                >
+                  <option value="elegant">Elegant</option>
+                  <option value="pastel">Pasztell</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="dark">Sötét</option>
+                </select>
+              </label>
               {KEYCLOAK_AUTH && !isAuthenticated ? (
                 <button
                   type="button"
