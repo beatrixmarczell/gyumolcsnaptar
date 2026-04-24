@@ -319,8 +319,9 @@ export function applyAppStatePayload(
   setManualOverridesByMonth(p.manualOverridesByMonth)
   setExcludedChildrenByMonth(p.excludedChildrenByMonth ?? {})
   setHeaderImage(p.headerImage)
-  setUiTheme(p.uiTheme)
-  setDarkMode(p.darkMode)
+  // UI theme remains device-local: do not apply cloud values.
+  void setUiTheme
+  void setDarkMode
   setSettingsPanelOpen(p.settingsPanelOpen)
   persistHeaderToLocalStorage(p.headerImage)
   setStartChild(mergedStart[p.monthValue] ?? mergedStart['2026-02'] ?? 'Petrilla Ádám')
