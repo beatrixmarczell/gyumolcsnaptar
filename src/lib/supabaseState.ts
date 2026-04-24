@@ -5,7 +5,14 @@ import {
   type CloudLoadResult,
   type HeaderImageState,
 } from './cloudTypes'
-import { getDefaultGroupId, getFunctionUrl, getSupabase, isKeycloakAuthEnabled } from './supabaseClient'
+import {
+  getDefaultGroupId,
+  getDesktopAccessToken,
+  getFunctionUrl,
+  getSupabase,
+  isDesktopAuthEnabled,
+  isKeycloakAuthEnabled,
+} from './supabaseClient'
 
 const HEADER_KEY = 'fruit-calendar-header-image'
 
@@ -113,6 +120,7 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
     payload?: unknown
     role?: AppUserRole
     displayName?: string | null
+    userProfileId?: string | null
     error?: string
   }
 
@@ -124,18 +132,43 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
     payload,
     role: json.role ?? 'viewer',
     displayName: json.displayName ?? null,
+    userProfileId: json.userProfileId ?? null,
+  }
+}
+
+async function fetchPublicReadOnlyState(): Promise<CloudLoadResult> {
+  const supabase = getSupabase()
+  const groupId = getDefaultGroupId()
+  if (!supabase || !groupId) {
+    return { payload: null, role: 'viewer', displayName: null, userProfileId: null }
+  }
+  const { data, error } = await supabase
+    .from('group_calendar_state')
+    .select('payload')
+    .eq('group_id', groupId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Publikus felhő lekérés: ${error.message}`)
+  }
+  return {
+    payload: data?.payload ? parseAppStatePayload(data.payload) : null,
+    role: 'viewer',
+    displayName: null,
+    userProfileId: null,
   }
 }
 
 export async function fetchGroupState(params?: {
   accessToken?: string | null
 }): Promise<CloudLoadResult> {
-  const keycloakMode = isKeycloakAuthEnabled()
-  if (keycloakMode) {
-    if (!params?.accessToken) {
-      return { payload: null, role: 'viewer', displayName: null }
+  const gatewayMode = isKeycloakAuthEnabled() || isDesktopAuthEnabled()
+  if (gatewayMode) {
+    const token = params?.accessToken ?? getDesktopAccessToken()
+    if (!token) {
+      return fetchPublicReadOnlyState()
     }
-    return fetchViaKeycloakGateway(params.accessToken)
+    return fetchViaKeycloakGateway(token)
   }
 
   const supabase = getSupabase()
@@ -156,6 +189,7 @@ export async function fetchGroupState(params?: {
     payload: data?.payload ? parseAppStatePayload(data.payload) : null,
     role: 'admin',
     displayName: null,
+    userProfileId: null,
   }
 }
 
@@ -163,12 +197,13 @@ export async function saveGroupState(
   payload: AppStatePayload,
   params?: { accessToken?: string | null; role?: AppUserRole },
 ): Promise<void> {
-  const keycloakMode = isKeycloakAuthEnabled()
-  if (keycloakMode) {
-    if (!params?.accessToken) {
+  const gatewayMode = isKeycloakAuthEnabled() || isDesktopAuthEnabled()
+  if (gatewayMode) {
+    const token = params?.accessToken ?? getDesktopAccessToken()
+    if (!token) {
       return
     }
-    if (params.role === 'viewer') {
+    if (params?.role === 'viewer') {
       return
     }
     const endpoint = getFunctionUrl('keycloak-gateway')
@@ -180,7 +215,7 @@ export async function saveGroupState(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${params.accessToken}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ action: 'save', groupId, payload }),
     })
@@ -304,3 +339,4 @@ export function buildAppStatePayload(s: {
     settingsPanelOpen: s.settingsPanelOpen,
   }
 }
+

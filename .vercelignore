@@ -1,0 +1,8 @@
+node_modules
+dist
+release
+tools
+electron
+*.zip
+supabase/.temp
+*.log

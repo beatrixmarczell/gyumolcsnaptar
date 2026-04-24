@@ -10,7 +10,12 @@ import {
 import type { AppUserRole, HeaderImageState } from './lib/cloudTypes'
 import { getAccessToken, initAuth, isKeycloakConfigured, login, logout } from './lib/auth/keycloakAuth'
 import { isCloudSyncAvailable, isKeycloakAuthEnabled } from './lib/supabaseClient'
-import { applyAppStatePayload, buildAppStatePayload, fetchGroupState, saveGroupState } from './lib/supabaseState'
+import {
+  applyAppStatePayload,
+  buildAppStatePayload,
+  fetchGroupState,
+  saveGroupState,
+} from './lib/supabaseState'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -62,6 +67,24 @@ function fromMonthInputValue(value: string): { year: number; monthIndex: number 
   return { year, monthIndex }
 }
 
+function parseDateKeys(text: string): string[] {
+  return [...new Set(text.split('\n').map((line) => line.trim()).filter(Boolean))].sort()
+}
+
+function serializeDateKeys(keys: string[]): string {
+  return [...new Set(keys)].sort().join('\n')
+}
+
+function normalizeMonthValue(value: string): string {
+  const [yearText, monthText] = value.split('-')
+  const year = Number(yearText)
+  const month = Number(monthText)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return value
+  }
+  return `${year}-${`${month}`.padStart(2, '0')}`
+}
+
 function App() {
   const [childrenText, setChildrenText] = useState(() => {
     return localStorage.getItem(CHILDREN_TEXT_STORAGE_KEY) ?? defaultChildren.join('\n')
@@ -104,6 +127,9 @@ function App() {
   })
   const [extraOffDaysText, setExtraOffDaysText] = useState(() => {
     return monthOffDaysByMonth['2026-02'] ?? ''
+  })
+  const [offDayPickerValue, setOffDayPickerValue] = useState(() => {
+    return `${normalizeMonthValue(monthValue)}-01`
   })
   const [manualOverridesByMonth, setManualOverridesByMonth] = useState<
     Record<string, Record<string, string>>
@@ -173,9 +199,15 @@ function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
+  const [userProfileId, setUserProfileId] = useState<string | null>(null)
   const cloudBootstrapStarted = useRef(false)
 
-  const canEdit = !KEYCLOAK_AUTH || userRole === 'admin' || userRole === 'editor'
+  const isLocalDevHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  const canEdit =
+    isLocalDevHost || (KEYCLOAK_AUTH && isAuthenticated && (userRole === 'admin' || userRole === 'editor'))
+  const { year, monthIndex } = fromMonthInputValue(monthValue)
 
   useEffect(() => {
     if (!KEYCLOAK_AUTH) {
@@ -187,8 +219,9 @@ function App() {
       setIsAuthenticated(session.authenticated)
       setUserDisplayName(session.displayName ?? session.email)
       if (!session.authenticated) {
-        setCloudStatus('off')
-        setCanSaveToCloud(false)
+        setCloudStatus('loading')
+        setCanSaveToCloud(true)
+        setAccessToken(null)
         return
       }
       const token = (await getAccessToken()) ?? session.token
@@ -204,7 +237,8 @@ function App() {
     if (KEYCLOAK_AUTH && !authReady) {
       return
     }
-    if (KEYCLOAK_AUTH && (!isAuthenticated || !accessToken)) {
+    const hasToken = Boolean(accessToken)
+    if (KEYCLOAK_AUTH && isAuthenticated && !hasToken) {
       setCloudStatus('off')
       return
     }
@@ -217,6 +251,7 @@ function App() {
       try {
         const remote = await fetchGroupState({ accessToken })
         setUserRole(remote.role)
+        setUserProfileId(remote.userProfileId ?? null)
         if (remote.displayName) {
           setUserDisplayName(remote.displayName)
         }
@@ -294,6 +329,10 @@ function App() {
   useEffect(() => {
     setExtraOffDaysText(monthOffDaysByMonth[monthValue] ?? '')
   }, [monthValue, monthOffDaysByMonth])
+
+  useEffect(() => {
+    setOffDayPickerValue(`${normalizeMonthValue(monthValue)}-01`)
+  }, [monthValue])
 
   useEffect(() => {
     const remembered = startChildByMonth[monthValue]
@@ -380,15 +419,13 @@ function App() {
   }, [children, startChild, monthValue])
 
   const extraOffDays = useMemo(() => {
-    return new Set(
-      extraOffDaysText
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
-    )
+    return new Set(parseDateKeys(extraOffDaysText))
   }, [extraOffDaysText])
+  const extraOffDayList = useMemo(() => parseDateKeys(extraOffDaysText), [extraOffDaysText])
+  const maxDateInMonth = useMemo(() => {
+    return toDateKey(new Date(year, monthIndex + 1, 0))
+  }, [year, monthIndex])
 
-  const { year, monthIndex } = fromMonthInputValue(monthValue)
   const workingDays = useMemo(
     () => getMonthWorkingDays(year, monthIndex, extraOffDays),
     [year, monthIndex, extraOffDays],
@@ -419,13 +456,62 @@ function App() {
 
   const updateOverride = (dateKey: string, child: string): void => {
     setManualOverrides((prev) => {
-      let next: Record<string, string>
-      if (child.trim().length === 0) {
-        const { [dateKey]: _, ...rest } = prev
-        next = rest
-      } else {
-        next = { ...prev, [dateKey]: child }
+      const cleanChildren = children.filter((name) => name.trim().length > 0)
+      if (cleanChildren.length === 0) {
+        return prev
       }
+
+      let currentIndex = Math.max(cleanChildren.indexOf(startChild), 0)
+      const usedChildren = new Set<string>()
+      const next: Record<string, string> = {}
+      const normalizedChild = child.trim()
+      const hasManualTarget = normalizedChild.length > 0
+      const targetIndex = hasManualTarget ? cleanChildren.indexOf(normalizedChild) : -1
+
+      const findNextAvailableIndex = (fromIndex: number): number => {
+        for (let step = 0; step < cleanChildren.length; step += 1) {
+          const idx = (fromIndex + step) % cleanChildren.length
+          if (!usedChildren.has(cleanChildren[idx])) {
+            return idx
+          }
+        }
+        return -1
+      }
+
+      const lockedOverrides: Record<string, string> = {}
+      Object.entries(prev).forEach(([key, value]) => {
+        if (key !== dateKey) {
+          lockedOverrides[key] = value
+        }
+      })
+
+      workingDays.forEach((date) => {
+        const key = toDateKey(date)
+        const availableIndex = findNextAvailableIndex(currentIndex)
+        const plannedChild = availableIndex >= 0 ? cleanChildren[availableIndex] : ''
+        const locked = lockedOverrides[key]
+        const lockedIndex = locked ? cleanChildren.indexOf(locked) : -1
+
+        let assignedChild = plannedChild
+        if (key === dateKey && hasManualTarget && targetIndex >= 0 && !usedChildren.has(normalizedChild)) {
+          assignedChild = normalizedChild
+          next[key] = normalizedChild
+        } else if (lockedIndex >= 0) {
+          assignedChild = locked
+          next[key] = locked
+        } else if (key > dateKey && assignedChild) {
+          next[key] = assignedChild
+        }
+
+        if (assignedChild) {
+          usedChildren.add(assignedChild)
+          const assignedIndex = cleanChildren.indexOf(assignedChild)
+          currentIndex = (assignedIndex + 1) % cleanChildren.length
+        } else {
+          currentIndex = (currentIndex + 1) % cleanChildren.length
+        }
+      })
+
       setManualOverridesByMonth((all) => ({
         ...all,
         [monthValue]: next,
@@ -531,11 +617,44 @@ function App() {
     void logout()
   }
 
+  const addExtraOffDay = (): void => {
+    if (!offDayPickerValue) {
+      return
+    }
+    const normalizedMonth = normalizeMonthValue(monthValue)
+    if (!offDayPickerValue.startsWith(`${normalizedMonth}-`)) {
+      alert(`Kérlek az aktuális hónapból válassz dátumot: ${normalizedMonth}`)
+      return
+    }
+    const next = serializeDateKeys([...extraOffDayList, offDayPickerValue])
+    setExtraOffDaysText(next)
+    setMonthOffDaysByMonth((prev) => ({
+      ...prev,
+      [monthValue]: next,
+    }))
+  }
+
+  const removeExtraOffDay = (dateKey: string): void => {
+    const next = serializeDateKeys(extraOffDayList.filter((item) => item !== dateKey))
+    setExtraOffDaysText(next)
+    setMonthOffDaysByMonth((prev) => ({
+      ...prev,
+      [monthValue]: next,
+    }))
+  }
+
   return (
     <main className={`app theme-${uiTheme} ${darkMode ? 'dark-mode' : ''}`}>
       <header className="title">
         <div className="title-row">
-          <h1 className="app-title">Gyümölcsnaptár</h1>
+          <div className="title-start">
+            {KEYCLOAK_AUTH && !isAuthenticated ? (
+              <button type="button" className="action-button" onClick={doLogin} disabled={!isKeycloakConfigured()}>
+                Bejelentkezés
+              </button>
+            ) : null}
+            <h1 className="app-title">Gyümölcsnaptár</h1>
+          </div>
           <div className="title-end">
             <span className="app-version-discrete" title="Alkalmazás verziója">
               {APP_VERSION}
@@ -556,7 +675,7 @@ function App() {
                 {authReady
                   ? isAuthenticated
                     ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})`
-                    : 'Felhasználó: nincs bejelentkezve'
+                    : 'Felhasználó: nincs bejelentkezve (csak olvasás)'
                   : 'Felhasználó: ellenőrzés…'}
               </span>
             ) : null}
@@ -576,48 +695,28 @@ function App() {
               >
                 {darkMode ? '☀️ Világos mód' : '🌙 Sötét mód'}
               </button>
-              {KEYCLOAK_AUTH ? (
-                isAuthenticated ? (
-                  <button type="button" className="toggle-button" onClick={doLogout}>
-                    Kijelentkezés
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="toggle-button"
-                    onClick={doLogin}
-                    disabled={!isKeycloakConfigured()}
-                  >
-                    Bejelentkezés
-                  </button>
-                )
+              {KEYCLOAK_AUTH && isAuthenticated ? (
+                <button type="button" className="toggle-button" onClick={doLogout}>
+                  Kijelentkezés
+                </button>
               ) : null}
             </div>
           </div>
         </div>
       </header>
 
-      {KEYCLOAK_AUTH && authReady && !isAuthenticated ? (
-        <section className="panel inline-info">
-          <h2>Bejelentkezés szükséges</h2>
-          <p>A naptár megtekintéséhez és közös mentéshez jelentkezz be Keycloakkal.</p>
-          <button type="button" className="action-button" onClick={doLogin} disabled={!isKeycloakConfigured()}>
-            Bejelentkezés Keycloakkal
-          </button>
-        </section>
-      ) : null}
-
-      {!KEYCLOAK_AUTH || isAuthenticated ? (
-        <section className={`layout ${settingsPanelOpen ? '' : 'sidebar-collapsed'}`}>
+      <section className={`layout ${canEdit ? (settingsPanelOpen ? '' : 'sidebar-collapsed') : 'layout-readonly'}`}>
         <button
           type="button"
           className="sidebar-toggle"
+          style={{ display: canEdit ? undefined : 'none' }}
           onClick={() => setSettingsPanelOpen((prev) => !prev)}
           aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
           title={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
         >
           {settingsPanelOpen ? '◀' : '▶'}
         </button>
+        {canEdit ? (
         <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
           <h2>Beállítások</h2>
 
@@ -656,24 +755,67 @@ function App() {
           </label>
 
           <details className="collapsible-box">
-            <summary>Extra szünnapok (1 sor = YYYY-MM-DD)</summary>
+            <summary>Extra szünnapok (naptárból választható)</summary>
             <label>
-              Dátumok
-              <textarea
-                value={extraOffDaysText}
-                disabled={!canEdit}
-                onChange={(e) => {
-                  const value = e.target.value
-                  setExtraOffDaysText(value)
-                  setMonthOffDaysByMonth((prev) => ({
-                    ...prev,
-                    [monthValue]: value,
-                  }))
-                }}
-                placeholder="2026-02-13"
-                rows={4}
-              />
+              Szünnap hozzáadása
+              <div className="date-picker-row">
+                <input
+                  type="date"
+                  value={offDayPickerValue}
+                  min={`${normalizeMonthValue(monthValue)}-01`}
+                  max={maxDateInMonth}
+                  disabled={!canEdit}
+                  onChange={(e) => setOffDayPickerValue(e.target.value)}
+                  onFocus={(e) => {
+                    const picker = e.currentTarget as HTMLInputElement & { showPicker?: () => void }
+                    try {
+                      picker.showPicker?.()
+                    } catch {
+                      // Browsers without showPicker keep native default behavior.
+                    }
+                  }}
+                  onClick={(e) => {
+                    const picker = e.currentTarget as HTMLInputElement & { showPicker?: () => void }
+                    try {
+                      picker.showPicker?.()
+                    } catch {
+                      // Browsers without showPicker keep native default behavior.
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="action-button extra-off-day-add"
+                  title="Szünnap hozzáadása"
+                  aria-label="Szünnap hozzáadása"
+                  disabled={!canEdit}
+                  onClick={addExtraOffDay}
+                >
+                  +
+                </button>
+              </div>
             </label>
+            {extraOffDayList.length > 0 ? (
+              <ul className="extra-off-days-list">
+                {extraOffDayList.map((dateKey) => (
+                  <li key={dateKey}>
+                    <span>{dateKey}</span>
+                    <button
+                      type="button"
+                      className="action-button secondary extra-off-day-remove"
+                      title="Szünnap törlése"
+                      aria-label={`Szünnap törlése: ${dateKey}`}
+                      disabled={!canEdit}
+                      onClick={() => removeExtraOffDay(dateKey)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="compact-note">Ehhez a hónaphoz még nincs extra szünnap megadva.</p>
+            )}
           </details>
 
           <details className="collapsible-box">
@@ -748,6 +890,7 @@ function App() {
             )}
           </details>
         </aside>
+        ) : null}
 
         <div className="main-column">
           <section className="panel calendar-panel">
@@ -773,17 +916,21 @@ function App() {
                       return (
                         <td key={item.dateKey}>
                           <div className="day">{item.date.getDate()}</div>
-                          <select
-                            value={item.child}
-                            disabled={!canEdit}
-                            onChange={(e) => updateOverride(item.dateKey, e.target.value)}
-                          >
-                            {children.map((name) => (
-                              <option key={`${item.dateKey}-${name}`} value={name}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
+                          {canEdit ? (
+                            <select
+                              value={item.child}
+                              disabled={!canEdit}
+                              onChange={(e) => updateOverride(item.dateKey, e.target.value)}
+                            >
+                              {children.map((name) => (
+                                <option key={`${item.dateKey}-${name}`} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div>{item.child}</div>
+                          )}
                         </td>
                       )
                     })}
@@ -809,6 +956,11 @@ function App() {
               <p>
                 Következő hónap induló neve: <strong>{monthResult.nextStartChild || '-'}</strong>
               </p>
+              {KEYCLOAK_AUTH ? (
+                <p>
+                  Profil azonosító: <strong>{userProfileId ?? '—'}</strong>
+                </p>
+              ) : null}
             </div>
           </section>
 
@@ -823,8 +975,7 @@ function App() {
             />
           </section>
         </div>
-        </section>
-      ) : null}
+      </section>
 
     </main>
   )
