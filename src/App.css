@@ -604,6 +604,32 @@ table {
   padding: 7px 10px;
 }
 
+.calendar-actions .action-button-save {
+  border-color: #8fd3a7;
+  background: linear-gradient(135deg, #e8f9ef 0%, #d8f3e3 100%);
+  color: #14532d;
+}
+
+.calendar-actions .action-button-save:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d8f3e3 0%, #c6ecd6 100%);
+  box-shadow: 0 6px 14px rgba(22, 101, 52, 0.2);
+}
+
+.calendar-actions .action-button-save-right {
+  margin-left: auto;
+}
+
+.calendar-actions .action-button-restore {
+  border-color: #c8b6ff;
+  background: linear-gradient(135deg, #f3eeff 0%, #e8e0ff 100%);
+  color: #4c1d95;
+}
+
+.calendar-actions .action-button-restore:hover:not(:disabled) {
+  background: linear-gradient(135deg, #e8e0ff 0%, #ddd2ff 100%);
+  box-shadow: 0 6px 14px rgba(76, 29, 149, 0.2);
+}
+
 .inline-info {
   margin-top: 10px;
   padding: 8px 10px;
@@ -923,5 +949,9 @@ input[type='file'] {
   .calendar-actions .action-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .calendar-actions .action-button-save-right {
+    margin-left: 0;
   }
 }

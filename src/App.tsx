@@ -54,6 +54,7 @@ const LAST_MONTH_STORAGE_KEY = 'fruit-calendar-last-month'
 const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
+const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = 'v1.6.1'
 
@@ -94,6 +95,11 @@ function normalizeMonthValue(value: string): string {
     return value
   }
   return `${year}-${`${month}`.padStart(2, '0')}`
+}
+
+type ManualSaveSnapshot = {
+  payload: ReturnType<typeof buildAppStatePayload>
+  savedAt: number
 }
 
 function App() {
@@ -228,6 +234,26 @@ function App() {
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
+  const [manualSaveSnapshot, setManualSaveSnapshot] = useState<ManualSaveSnapshot | null>(() => {
+    try {
+      const stored = localStorage.getItem(MANUAL_SAVE_SNAPSHOT_STORAGE_KEY)
+      if (!stored) {
+        return null
+      }
+      const parsed = JSON.parse(stored) as Partial<ManualSaveSnapshot>
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.savedAt !== 'number' || !parsed.payload) {
+        return null
+      }
+      return {
+        payload: parsed.payload as ReturnType<typeof buildAppStatePayload>,
+        savedAt: parsed.savedAt,
+      }
+    } catch {
+      return null
+    }
+  })
+  const [isManualSaveBusy, setIsManualSaveBusy] = useState(false)
+  const [isRestoreBusy, setIsRestoreBusy] = useState(false)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -503,6 +529,44 @@ function App() {
       displayMonthIndex: monthIndex,
     })
   }, [exportTitle, weeks, headerImage, year, monthIndex])
+  const currentPayload = useMemo(
+    () =>
+      buildAppStatePayload({
+        childrenText,
+        monthValue,
+        startChildByMonth,
+        monthOffDaysByMonth,
+        manualOverridesByMonth,
+        excludedChildrenByMonth,
+        headerImage,
+        uiTheme,
+        darkMode,
+        settingsPanelOpen,
+      }),
+    [
+      childrenText,
+      monthValue,
+      startChildByMonth,
+      monthOffDaysByMonth,
+      manualOverridesByMonth,
+      excludedChildrenByMonth,
+      headerImage,
+      uiTheme,
+      darkMode,
+      settingsPanelOpen,
+    ],
+  )
+  const currentPayloadSignature = useMemo(() => JSON.stringify(currentPayload), [currentPayload])
+  const manualSnapshotSignature = useMemo(
+    () => (manualSaveSnapshot ? JSON.stringify(manualSaveSnapshot.payload) : null),
+    [manualSaveSnapshot],
+  )
+  const canCreateManualSave = canEdit && !isManualSaveBusy && currentPayloadSignature !== manualSnapshotSignature
+  const canRestoreLastManualSave = canEdit && !isRestoreBusy && Boolean(manualSaveSnapshot)
+  const isAdminDemoUser = useMemo(() => {
+    const normalized = (userDisplayName ?? '').trim().toLowerCase()
+    return normalized === 'admin.demo' || normalized === 'admin_demo' || normalized.includes('demo admin')
+  }, [userDisplayName])
 
   const continueWithNextMonth = (): void => {
     const next = addOneMonth(year, monthIndex)
@@ -747,6 +811,72 @@ function App() {
     }))
   }
 
+  const saveManualSnapshot = async (): Promise<void> => {
+    if (!canCreateManualSave) {
+      return
+    }
+    const confirmed = window.confirm(
+      'Biztosan mented az aktuális teljes névsor állapotot (összes hónap), mint új SAVE pont?',
+    )
+    if (!confirmed) {
+      return
+    }
+    setIsManualSaveBusy(true)
+    const snapshot: ManualSaveSnapshot = {
+      payload: currentPayload,
+      savedAt: Date.now(),
+    }
+    try {
+      localStorage.setItem(MANUAL_SAVE_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot))
+      setManualSaveSnapshot(snapshot)
+      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && accessToken && canEdit) {
+        await saveGroupState(snapshot.payload, { accessToken, role: userRole })
+        setCloudStatus('ok')
+      }
+    } catch (error) {
+      console.error('SAVE mentési pont hiba:', error)
+      setCloudStatus('err')
+    } finally {
+      setIsManualSaveBusy(false)
+    }
+  }
+
+  const restoreLastManualSnapshotToDatabase = async (): Promise<void> => {
+    if (!manualSaveSnapshot || isRestoreBusy) {
+      return
+    }
+    setIsRestoreBusy(true)
+    try {
+      applyAppStatePayload(
+        { payload: manualSaveSnapshot.payload, role: userRole, displayName: userDisplayName, userProfileId },
+        {
+          setChildrenText,
+          setMonthValue,
+          setStartChildByMonth,
+          setMonthOffDaysByMonth,
+          setManualOverridesByMonth,
+          setExcludedChildrenByMonth,
+          setHeaderImage,
+          setUiTheme,
+          setDarkMode,
+          setSettingsPanelOpen,
+          setStartChild,
+          setExtraOffDaysText,
+          setManualOverrides: () => {},
+        },
+      )
+      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && accessToken && canEdit) {
+        await saveGroupState(manualSaveSnapshot.payload, { accessToken, role: userRole })
+        setCloudStatus('ok')
+      }
+    } catch (error) {
+      console.error('SAVE visszatöltés hiba:', error)
+      setCloudStatus('err')
+    } finally {
+      setIsRestoreBusy(false)
+    }
+  }
+
   return (
     <main className={`app theme-${uiTheme} ${darkMode ? 'dark-mode' : ''}`}>
       <header className="title">
@@ -939,11 +1069,6 @@ function App() {
             </label>
           </details>
 
-          <div className="stats">
-            <p>
-              Munkanapok: <strong>{workingDays.length}</strong>
-            </p>
-          </div>
           <details className="collapsible-box" open={Boolean(headerImage)}>
             <summary>Fejléckép (referencia designhoz)</summary>
             <label>
@@ -1085,16 +1210,41 @@ function App() {
               <button type="button" className="action-button" onClick={downloadJpg}>
                 <span>🖼️</span> JPG letöltés
               </button>
+              {isAuthenticated ? (
+                <>
+                  <button
+                    type="button"
+                    className="action-button action-button-restore"
+                    disabled={!canRestoreLastManualSave}
+                    onClick={() => void restoreLastManualSnapshotToDatabase()}
+                  >
+                    <span>↩️</span> Utolsó SAVE visszatöltése
+                  </button>
+                  <button
+                    type="button"
+                    className="action-button action-button-save action-button-save-right"
+                    disabled={!canCreateManualSave}
+                    onClick={() => void saveManualSnapshot()}
+                  >
+                    <span>💾</span> SAVE (összes hónap)
+                  </button>
+                </>
+              ) : null}
             </div>
+            {isAdminDemoUser ? (
+              <div className="inline-info">
+                <p>
+                  Utolsó SAVE:{' '}
+                  <strong>
+                    {manualSaveSnapshot ? new Date(manualSaveSnapshot.savedAt).toLocaleString('hu-HU') : 'még nincs'}
+                  </strong>
+                </p>
+              </div>
+            ) : null}
             <div className="inline-info">
               <p>
                 Következő hónap induló neve: <strong>{monthResult.nextStartChild || '-'}</strong>
               </p>
-              {KEYCLOAK_AUTH ? (
-                <p>
-                  Profil azonosító: <strong>{userProfileId ?? '—'}</strong>
-                </p>
-              ) : null}
             </div>
           </section>
 
