@@ -23,6 +23,7 @@
         "http://localhost:5174/*",
         "https://*.github.io/*",
         "https://gyuminaptar.hu/*",
+        "https://www.gyuminaptar.hu/*",
         "https://app.gyuminaptar.hu/*"
       ],
       "webOrigins": [
@@ -30,6 +31,7 @@
         "http://localhost:5174",
         "https://beatrixmarczell.github.io",
         "https://gyuminaptar.hu",
+        "https://www.gyuminaptar.hu",
         "https://app.gyuminaptar.hu"
       ]
     }
