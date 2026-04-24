@@ -207,7 +207,7 @@ function App() {
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   const canEdit =
     isLocalDevHost || (KEYCLOAK_AUTH && isAuthenticated && (userRole === 'admin' || userRole === 'editor'))
-  const themeModeValue = `${uiTheme}:${darkMode ? 'dark' : 'light'}`
+  const themeModeValue = darkMode ? 'dark' : uiTheme
   const { year, monthIndex } = fromMonthInputValue(monthValue)
 
   useEffect(() => {
@@ -654,19 +654,21 @@ function App() {
               <select
                 value={themeModeValue}
                 onChange={(e) => {
-                  const [nextTheme, mode] = e.target.value.split(':')
-                  if (nextTheme === 'elegant' || nextTheme === 'pastel' || nextTheme === 'minimal') {
-                    setUiTheme(nextTheme)
+                  const selected = e.target.value
+                  if (selected === 'dark') {
+                    setDarkMode(true)
+                    return
                   }
-                  setDarkMode(mode === 'dark')
+                  if (selected === 'elegant' || selected === 'pastel' || selected === 'minimal') {
+                    setUiTheme(selected)
+                    setDarkMode(false)
+                  }
                 }}
               >
-                <option value="elegant:light">Elegant - Világos</option>
-                <option value="elegant:dark">Elegant - Sötét</option>
-                <option value="pastel:light">Pasztell - Világos</option>
-                <option value="pastel:dark">Pasztell - Sötét</option>
-                <option value="minimal:light">Minimal - Világos</option>
-                <option value="minimal:dark">Minimal - Sötét</option>
+                <option value="elegant">Elegant</option>
+                <option value="pastel">Pasztell</option>
+                <option value="minimal">Minimal</option>
+                <option value="dark">Sötét</option>
               </select>
             </label>
             <h1 className="app-title">Gyümölcsnaptár</h1>
