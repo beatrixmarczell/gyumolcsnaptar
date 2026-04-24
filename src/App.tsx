@@ -558,6 +558,9 @@ function App() {
       displayMonthIndex: monthIndex,
     })
   }, [exportTitle, weeks, headerImage, year, monthIndex])
+  const printPreviewFrameHtml = useMemo(() => {
+    return buildResponsivePreviewHtml(printPreviewHtml)
+  }, [printPreviewHtml])
   const currentPayload = useMemo(
     () =>
       buildAppStatePayload({
@@ -1372,7 +1375,7 @@ function App() {
               title="Nyomtatási előnézet"
               className="print-preview-frame"
               sandbox=""
-              srcDoc={printPreviewHtml}
+              srcDoc={printPreviewFrameHtml}
             />
           </section>
         </div>
@@ -1624,6 +1627,57 @@ async function waitForImagesToLoad(root: HTMLElement): Promise<void> {
       })
     }),
   )
+}
+
+function buildResponsivePreviewHtml(contentHtml: string): string {
+  return `<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        overflow: hidden;
+        background: #ffffff;
+      }
+      #preview-stage {
+        width: 100%;
+        overflow: hidden;
+      }
+      #preview-root {
+        transform-origin: top left;
+        will-change: transform;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="preview-stage">
+      <div id="preview-root">${contentHtml}</div>
+    </div>
+    <script>
+      (function() {
+        const stage = document.getElementById('preview-stage');
+        const root = document.getElementById('preview-root');
+        if (!stage || !root) return;
+        const fit = () => {
+          const contentWidth = root.scrollWidth || 1;
+          const availableWidth = stage.clientWidth || 1;
+          const scale = Math.min(1, availableWidth / contentWidth);
+          root.style.transform = 'scale(' + scale + ')';
+          const contentHeight = root.scrollHeight || 0;
+          const scaledHeight = Math.ceil(contentHeight * scale);
+          stage.style.height = scaledHeight + 'px';
+          document.body.style.height = scaledHeight + 'px';
+        };
+        fit();
+        window.addEventListener('resize', fit);
+      })();
+    </script>
+  </body>
+</html>`
 }
 
 export default App

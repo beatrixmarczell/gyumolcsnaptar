@@ -1140,4 +1140,8 @@ input[type='file'] {
   .child-filter-header h3 {
     font-size: 0.86rem;
   }
+
+  .print-preview-frame {
+    height: 360px;
+  }
 }
