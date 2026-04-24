@@ -54,7 +54,7 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.5.1'
+const APP_VERSION = 'v1.5.2'
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -649,7 +649,9 @@ function App() {
       <header className="title">
         <div className="title-row">
           <div className="title-start">
-            <h1 className="app-title">Gyümölcsnaptár</h1>
+            <h1 className="app-title">
+              Gyümölcsnaptár <span className="group-name">(Zsiráf csoport)</span>
+            </h1>
           </div>
           <div className="title-end">
             <span className="app-version-discrete" title="Alkalmazás verziója">
@@ -676,6 +678,21 @@ function App() {
               </span>
             ) : null}
             <div className="ui-controls">
+              {KEYCLOAK_AUTH && !isAuthenticated ? (
+                <button
+                  type="button"
+                  className="login-button-compact"
+                  onClick={doLogin}
+                  disabled={!isKeycloakConfigured()}
+                >
+                  Bejelentkezés
+                </button>
+              ) : null}
+              {KEYCLOAK_AUTH && isAuthenticated ? (
+                <button type="button" className="toggle-button" onClick={doLogout}>
+                  Kijelentkezés
+                </button>
+              ) : null}
               <label className="inline-control compact-control">
                 Megjelenés
                 <select
@@ -698,21 +715,6 @@ function App() {
                   <option value="dark">Sötét</option>
                 </select>
               </label>
-              {KEYCLOAK_AUTH && !isAuthenticated ? (
-                <button
-                  type="button"
-                  className="login-button-compact"
-                  onClick={doLogin}
-                  disabled={!isKeycloakConfigured()}
-                >
-                  Bejelentkezés
-                </button>
-              ) : null}
-              {KEYCLOAK_AUTH && isAuthenticated ? (
-                <button type="button" className="toggle-button" onClick={doLogout}>
-                  Kijelentkezés
-                </button>
-              ) : null}
             </div>
           </div>
         </div>
