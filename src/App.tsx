@@ -968,6 +968,28 @@ function App() {
             <h1 className="app-title">
               Gyümölcsnaptár <span className="group-name">- Zsiráf csoport</span>
             </h1>
+            <label className="inline-control compact-control appearance-control">
+              Megjelenés
+              <select
+                value={themeModeValue}
+                onChange={(e) => {
+                  const selected = e.target.value
+                  if (selected === 'dark') {
+                    setDarkMode(true)
+                    return
+                  }
+                  if (selected === 'elegant' || selected === 'pastel' || selected === 'minimal') {
+                    setUiTheme(selected)
+                    setDarkMode(false)
+                  }
+                }}
+              >
+                <option value="elegant">Elegant</option>
+                <option value="pastel">Pasztell</option>
+                <option value="minimal">Minimal</option>
+                <option value="dark">Sötét</option>
+              </select>
+            </label>
           </div>
           <div className="title-end">
             <span className="app-version-discrete" title="Alkalmazás verziója">
@@ -979,7 +1001,7 @@ function App() {
                 title="Közös adat a Supabase felhőben. Mindenki, aki a linket használja, ugyanazt a mentést látja."
               >
                 {cloudStatus === 'loading' && 'Felhő: betöltés…'}
-                {cloudStatus === 'ok' && 'Felhő: mentve (közös)'}
+                {cloudStatus === 'ok' && 'Felhő: mentve'}
                 {cloudStatus === 'err' && 'Felhő: hiba'}
                 {cloudStatus === 'off' && 'Felhő: —'}
               </span>
@@ -1005,28 +1027,6 @@ function App() {
                   Kijelentkezés
                 </button>
               ) : null}
-              <label className="inline-control compact-control">
-                Megjelenés
-                <select
-                  value={themeModeValue}
-                  onChange={(e) => {
-                    const selected = e.target.value
-                    if (selected === 'dark') {
-                      setDarkMode(true)
-                      return
-                    }
-                    if (selected === 'elegant' || selected === 'pastel' || selected === 'minimal') {
-                      setUiTheme(selected)
-                      setDarkMode(false)
-                    }
-                  }}
-                >
-                  <option value="elegant">Elegant</option>
-                  <option value="pastel">Pasztell</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="dark">Sötét</option>
-                </select>
-              </label>
             </div>
           </div>
         </div>
