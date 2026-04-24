@@ -69,6 +69,8 @@ const APP_VERSION_DISPLAY = (() => {
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
+const KEYCLOAK_URL = (import.meta.env.VITE_KEYCLOAK_URL as string | undefined) ?? ''
+const LOCAL_GATEWAY_BEARER_TOKEN = (import.meta.env.VITE_LOCAL_GATEWAY_BEARER_TOKEN as string | undefined)?.trim() ?? ''
 
 const rolePriority: Record<AppUserRole, number> = {
   viewer: 0,
@@ -279,6 +281,8 @@ function App() {
   const canEdit = KEYCLOAK_AUTH
     ? isAuthenticated && (userRole === 'admin' || userRole === 'editor')
     : true
+  const useLocalGatewayToken = KEYCLOAK_AUTH && KEYCLOAK_URL.startsWith('http://localhost') && Boolean(LOCAL_GATEWAY_BEARER_TOKEN)
+  const gatewayAccessToken = useLocalGatewayToken ? LOCAL_GATEWAY_BEARER_TOKEN : accessToken
   const themeModeValue = darkMode ? 'dark' : uiTheme
   const { year, monthIndex } = fromMonthInputValue(monthValue)
 
@@ -311,7 +315,7 @@ function App() {
     if (KEYCLOAK_AUTH && !authReady) {
       return
     }
-    const hasToken = Boolean(accessToken)
+    const hasToken = Boolean(gatewayAccessToken)
     if (KEYCLOAK_AUTH && isAuthenticated && !hasToken) {
       setCloudStatus('off')
       return
@@ -323,7 +327,7 @@ function App() {
     const run = async (): Promise<void> => {
       setCloudStatus('loading')
       try {
-        const remote = await fetchGroupState({ accessToken })
+        const remote = await fetchGroupState({ accessToken: gatewayAccessToken })
         setUserRole((prev) => keepHigherRole(prev, remote.role))
         setUserProfileId(remote.userProfileId ?? null)
         if (remote.displayName) {
@@ -355,13 +359,13 @@ function App() {
       }
     }
     void run()
-  }, [authReady, isAuthenticated, accessToken])
+  }, [authReady, isAuthenticated, gatewayAccessToken])
 
   useEffect(() => {
     if (!CLOUD_SYNC || !canSaveToCloud) {
       return
     }
-    if (KEYCLOAK_AUTH && (!isAuthenticated || !accessToken || !canEdit)) {
+    if (KEYCLOAK_AUTH && (!isAuthenticated || !gatewayAccessToken || !canEdit)) {
       return
     }
     const payload = buildAppStatePayload({
@@ -377,7 +381,7 @@ function App() {
       settingsPanelOpen,
     })
     const timer = setTimeout(() => {
-      void saveGroupState(payload, { accessToken, role: userRole })
+      void saveGroupState(payload, { accessToken: gatewayAccessToken, role: userRole })
         .then(() => setCloudStatus('ok'))
         .catch((e) => {
           console.error('Felhő mentés:', e)
@@ -398,7 +402,7 @@ function App() {
     settingsPanelOpen,
     canSaveToCloud,
     isAuthenticated,
-    accessToken,
+    gatewayAccessToken,
     userRole,
     canEdit,
   ])
@@ -905,8 +909,8 @@ function App() {
     try {
       localStorage.setItem(MANUAL_SAVE_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot))
       setManualSaveSnapshot(snapshot)
-      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && accessToken && canEdit) {
-        await saveGroupState(snapshot.payload, { accessToken, role: userRole })
+      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && gatewayAccessToken && canEdit) {
+        await saveGroupState(snapshot.payload, { accessToken: gatewayAccessToken, role: userRole })
         setCloudStatus('ok')
       }
     } catch (error) {
@@ -941,8 +945,8 @@ function App() {
           setManualOverrides: () => {},
         },
       )
-      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && accessToken && canEdit) {
-        await saveGroupState(manualSaveSnapshot.payload, { accessToken, role: userRole })
+      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && gatewayAccessToken && canEdit) {
+        await saveGroupState(manualSaveSnapshot.payload, { accessToken: gatewayAccessToken, role: userRole })
         setCloudStatus('ok')
       }
     } catch (error) {

@@ -1009,8 +1009,48 @@ input[type='file'] {
 }
 
 @media (max-width: 760px) {
+  .app {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .title,
+  .panel {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
   .title-row {
     flex-direction: column;
+    gap: 8px;
+  }
+
+  .title-end {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .cloud-pill {
+    max-width: none;
+    width: 100%;
+    text-align: left;
+  }
+
+  .ui-controls {
+    justify-items: stretch;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .compact-control,
+  .inline-control select,
+  .login-button-compact {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .calendar-panel {
+    padding: 8px;
   }
 
   .inline-control select,
@@ -1018,8 +1058,41 @@ input[type='file'] {
     width: 100%;
   }
 
+  .calendar-heading {
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .calendar-nav-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+  }
+
+  .calendar-title-button {
+    font-size: 0.9rem;
+    padding: 5px 8px;
+    gap: 6px;
+  }
+
   .calendar-panel table {
     min-width: 760px;
+  }
+
+  th,
+  td {
+    padding: 3px;
+  }
+
+  .week-label {
+    font-size: 0.72rem;
+  }
+
+  td select {
+    min-width: 96px;
+    font-size: 0.76rem;
+    padding: 4px 5px;
   }
 
   .child-filter-results {
@@ -1046,5 +1119,25 @@ input[type='file'] {
 
   .calendar-actions .action-button-save-right {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-title {
+    font-size: clamp(1.55rem, 7vw, 1.9rem);
+  }
+
+  .group-name {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.62em;
+  }
+
+  .calendar-title-button {
+    font-size: 0.84rem;
+  }
+
+  .child-filter-header h3 {
+    font-size: 0.86rem;
   }
 }
