@@ -744,8 +744,23 @@ th {
   font-size: 0.76rem;
   color: var(--text-secondary);
   font-weight: 600;
+  background: #eef3fb;
+  border-right: 1px solid #d9e4f6;
+}
+
+.theme-pastel .week-label {
   background: #f6f0ff;
-  border-right: 1px solid #e7d8ff;
+  border-right-color: #e8dafc;
+}
+
+.theme-minimal .week-label {
+  background: #f3f5f8;
+  border-right-color: #e3e7ee;
+}
+
+.dark-mode .week-label {
+  background: #2b3547;
+  border-right-color: #3d4d67;
 }
 
 .day {
@@ -820,8 +835,8 @@ td select {
 .login-button-compact {
   width: auto;
   min-width: 0;
-  padding: 4px 10px;
-  font-size: 0.75rem;
+  padding: 3px 8px;
+  font-size: 0.72rem;
   border-radius: 999px;
   opacity: 0.86;
   line-height: 1.2;
