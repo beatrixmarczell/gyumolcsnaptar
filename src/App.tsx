@@ -668,13 +668,9 @@ function App() {
                 {cloudStatus === 'off' && 'Felhő: —'}
               </span>
             ) : null}
-            {KEYCLOAK_AUTH ? (
+            {KEYCLOAK_AUTH && isAuthenticated ? (
               <span className="cloud-pill" title="Bejelentkezett felhasználó szerepkörrel.">
-                {authReady
-                  ? isAuthenticated
-                    ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})`
-                    : 'Felhasználó: nincs bejelentkezve (csak olvasás)'
-                  : 'Felhasználó: ellenőrzés…'}
+                {authReady ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})` : 'Felhasználó: ellenőrzés…'}
               </span>
             ) : null}
             <div className="ui-controls">
