@@ -1374,7 +1374,7 @@ function App() {
             <iframe
               title="Nyomtatási előnézet"
               className="print-preview-frame"
-              sandbox=""
+              sandbox="allow-scripts"
               srcDoc={printPreviewFrameHtml}
             />
           </section>
@@ -1640,7 +1640,8 @@ function buildResponsivePreviewHtml(contentHtml: string): string {
         margin: 0;
         padding: 0;
         width: 100%;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         background: #ffffff;
       }
       #preview-stage {
@@ -1663,16 +1664,20 @@ function buildResponsivePreviewHtml(contentHtml: string): string {
         const root = document.getElementById('preview-root');
         if (!stage || !root) return;
         const fit = () => {
+          root.style.transform = 'none';
           const contentWidth = root.scrollWidth || 1;
           const availableWidth = stage.clientWidth || 1;
           const scale = Math.min(1, availableWidth / contentWidth);
           root.style.transform = 'scale(' + scale + ')';
+          root.style.width = contentWidth + 'px';
           const contentHeight = root.scrollHeight || 0;
           const scaledHeight = Math.ceil(contentHeight * scale);
           stage.style.height = scaledHeight + 'px';
           document.body.style.height = scaledHeight + 'px';
         };
-        fit();
+        window.requestAnimationFrame(fit);
+        window.setTimeout(fit, 100);
+        window.addEventListener('load', fit);
         window.addEventListener('resize', fit);
       })();
     </script>

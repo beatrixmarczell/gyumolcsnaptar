@@ -1043,8 +1043,7 @@ input[type='file'] {
   }
 
   .compact-control,
-  .inline-control select,
-  .login-button-compact {
+  .inline-control select {
     width: 100%;
     min-width: 0;
   }
@@ -1113,12 +1112,17 @@ input[type='file'] {
   }
 
   .calendar-actions .action-button {
-    width: 100%;
-    min-width: 0;
+    width: auto;
+    min-width: 140px;
+    flex: 0 1 auto;
   }
 
   .calendar-actions .action-button-save-right {
     margin-left: 0;
+  }
+
+  .calendar-actions {
+    justify-content: center;
   }
 }
 
@@ -1143,5 +1147,11 @@ input[type='file'] {
 
   .print-preview-frame {
     height: 360px;
+  }
+
+  .calendar-actions .action-button {
+    min-width: 120px;
+    font-size: 0.8rem;
+    padding: 7px 8px;
   }
 }
