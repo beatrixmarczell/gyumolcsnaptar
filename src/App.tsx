@@ -57,14 +57,7 @@ const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
-const APP_VERSION_DISPLAY = (() => {
-  const match = APP_VERSION.match(/v?\d+\.\d+\.\d+/i)
-  if (!match) {
-    return APP_VERSION
-  }
-  const core = match[0].replace(/^v/i, '')
-  return `v${core}`
-})()
+const APP_VERSION_DISPLAY = APP_VERSION.trim()
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()

@@ -14,7 +14,7 @@ function resolveAppVersion(): string {
   }
   const packageVersion = packageJson.version ? `v${packageJson.version}` : 'v0.0.0'
   try {
-    const tag = execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
+    const tag = execSync('git describe --tags --always --dirty', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim()
     return tag || packageVersion

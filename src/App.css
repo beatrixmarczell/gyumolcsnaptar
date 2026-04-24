@@ -169,7 +169,7 @@
 .title-end {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -184,7 +184,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 4px;
 }
 
 .app-version-discrete {
@@ -827,8 +827,8 @@ td select {
 .appearance-control {
   margin: 0;
   display: grid;
-  justify-items: end;
-  text-align: right;
+  justify-items: start;
+  text-align: left;
   min-width: 140px;
 }
 
@@ -1007,8 +1007,9 @@ input[type='file'] {
 
   .title-end {
     width: 100%;
+    flex-direction: column;
     align-items: flex-start;
-    justify-content: space-between;
+    gap: 6px;
   }
 
   .app-title {
@@ -1078,9 +1079,9 @@ input[type='file'] {
 
   .title-end {
     width: auto;
+    flex-direction: column;
     align-items: flex-end;
     justify-self: end;
-    justify-content: flex-start;
     gap: 6px;
   }
 
