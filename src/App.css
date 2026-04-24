@@ -1021,26 +1021,34 @@ input[type='file'] {
   }
 
   .title-row {
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+    align-items: start;
+  }
+
+  .title-start {
+    min-width: 0;
   }
 
   .title-end {
-    align-items: stretch;
-    gap: 8px;
+    width: auto;
+    align-items: flex-end;
+    justify-self: end;
+    gap: 6px;
   }
 
   .cloud-pill {
     max-width: max-content;
     width: auto;
-    text-align: left;
-    align-self: flex-start;
+    text-align: right;
+    align-self: flex-end;
   }
 
   .ui-controls {
-    justify-items: start;
-    width: 100%;
-    gap: 8px;
+    justify-items: end;
+    width: auto;
+    gap: 6px;
   }
 
   .compact-control,
@@ -1091,7 +1099,7 @@ input[type='file'] {
 
   th,
   td {
-    padding: 3px;
+    padding: 4px 3px;
     white-space: nowrap;
   }
 
@@ -1101,8 +1109,12 @@ input[type='file'] {
   }
 
   .week-label {
-    font-size: 0.69rem;
+    width: 18%;
+    font-size: 0.68rem;
     line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .day {
@@ -1114,9 +1126,10 @@ input[type='file'] {
     min-width: 0;
     width: 100%;
     font-family: 'Outfit', 'Segoe UI', system-ui, sans-serif;
-    font-size: 0.68rem;
-    line-height: 1.15;
-    padding: 2px 3px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    min-height: 28px;
+    padding: 3px 4px;
   }
 
   .child-filter-results {
