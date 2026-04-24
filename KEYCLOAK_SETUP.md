@@ -56,33 +56,33 @@ Plusz a meglévő Supabase env változók.
 
 ## 4/b) Publikus domain (stabil URL) beállítás
 
-Ha már megvan a domain (pl. `gyumolcsnaptar.hu`), állíts be fix app/auth hostot:
+Ha már megvan a domain (pl. `gyuminaptar.hu`), állíts be fix app/auth hostot:
 
-- app: `https://app.gyumolcsnaptar.hu` (vagy `https://gyumolcsnaptar.hu`)
-- auth: `https://auth.gyumolcsnaptar.hu` (Keycloak)
+- app: `https://app.gyuminaptar.hu` (vagy `https://gyuminaptar.hu`)
+- auth: `https://auth.gyuminaptar.hu` (Keycloak)
 
 Keycloak `gyumolcsnaptar-web` kliensben:
 
 - `Valid redirect URIs`
-  - `https://app.gyumolcsnaptar.hu/*`
-  - `https://gyumolcsnaptar.hu/*`
+  - `https://app.gyuminaptar.hu/*`
+  - `https://gyuminaptar.hu/*`
   - `http://localhost:5173/*`
 - `Web origins`
-  - `https://app.gyumolcsnaptar.hu`
-  - `https://gyumolcsnaptar.hu`
+  - `https://app.gyuminaptar.hu`
+  - `https://gyuminaptar.hu`
   - `http://localhost:5173`
 
 GitHub Actions secret-ek:
 
 - `VITE_AUTH_MODE=keycloak`
-- `VITE_KEYCLOAK_URL=https://auth.gyumolcsnaptar.hu`
+- `VITE_KEYCLOAK_URL=https://auth.gyuminaptar.hu`
 - `VITE_KEYCLOAK_REALM=gyumolcsnaptar`
 - `VITE_KEYCLOAK_CLIENT_ID=gyumolcsnaptar-web`
 
 Supabase function secret-ek:
 
-- `KEYCLOAK_ISSUER=https://auth.gyumolcsnaptar.hu/realms/gyumolcsnaptar`
-- `KEYCLOAK_JWKS_URL=https://auth.gyumolcsnaptar.hu/realms/gyumolcsnaptar/protocol/openid-connect/certs`
+- `KEYCLOAK_ISSUER=https://auth.gyuminaptar.hu/realms/gyumolcsnaptar`
+- `KEYCLOAK_JWKS_URL=https://auth.gyuminaptar.hu/realms/gyumolcsnaptar/protocol/openid-connect/certs`
 - `KEYCLOAK_AUDIENCE=gyumolcsnaptar-web`
 
 ## 5) User mapping és role kiosztás

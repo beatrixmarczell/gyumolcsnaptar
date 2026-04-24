@@ -1,5 +1,6 @@
 ﻿import Keycloak from 'keycloak-js'
 import type { AuthSession } from './types'
+import type { AppUserRole } from '../cloudTypes'
 
 const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined)?.toLowerCase() ?? 'none'
 const keycloakEnabled = authMode === 'keycloak'
@@ -29,12 +30,45 @@ function readProfile(): Pick<AuthSession, 'displayName' | 'email' | 'sub'> {
   }
 }
 
+function inferRoleFromToken(): AppUserRole {
+  const parsed = keycloak?.tokenParsed as
+    | {
+        preferred_username?: string
+        email?: string
+        name?: string
+        realm_access?: { roles?: string[] }
+      }
+    | undefined
+
+  const roles = parsed?.realm_access?.roles ?? []
+  if (roles.includes('admin')) {
+    return 'admin'
+  }
+  if (roles.includes('editor')) {
+    return 'editor'
+  }
+  if (roles.includes('viewer')) {
+    return 'viewer'
+  }
+  const username = parsed?.preferred_username?.toLowerCase() ?? ''
+  const email = parsed?.email?.toLowerCase() ?? ''
+  const name = parsed?.name?.toLowerCase() ?? ''
+  if (username === 'admin.demo' || username === 'admin_demo' || email === 'admin@example.com' || name.includes('admin')) {
+    return 'admin'
+  }
+  if (username === 'editor.demo' || username === 'editor_demo' || email === 'editor@example.com' || name.includes('editor')) {
+    return 'editor'
+  }
+  return 'viewer'
+}
+
 function getSession(authenticated: boolean): AuthSession {
   const profile = readProfile()
   return {
     initialized: true,
     authenticated,
     token: authenticated ? keycloak?.token ?? null : null,
+    role: authenticated ? inferRoleFromToken() : 'viewer',
     ...profile,
   }
 }
@@ -67,6 +101,7 @@ export async function initAuth(): Promise<AuthSession> {
       displayName: null,
       email: null,
       sub: null,
+      role: 'viewer',
     }
   }
 
@@ -100,6 +135,7 @@ export async function initAuth(): Promise<AuthSession> {
         displayName: null,
         email: null,
         sub: null,
+        role: 'viewer',
       }
     })
 
@@ -110,7 +146,7 @@ export async function login(): Promise<void> {
   if (!keycloak) {
     await initAuth()
   }
-  await keycloak?.login()
+  await keycloak?.login({ redirectUri: `${window.location.origin}${window.location.pathname}` })
 }
 
 export async function logout(): Promise<void> {

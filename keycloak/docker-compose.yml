@@ -4,6 +4,8 @@ services:
     command:
       - start-dev
       - --import-realm
+      - --hostname=https://auth.gyuminaptar.hu
+      - --proxy-headers=xforwarded
     ports:
       - '8080:8080'
     environment:

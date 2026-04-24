@@ -9,6 +9,7 @@ export type AuthSession = {
   displayName: string | null
   email: string | null
   sub: string | null
+  role: AppUserRole
 }
 
 export type AuthContext = {

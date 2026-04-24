@@ -60,6 +60,16 @@ const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
 
+const rolePriority: Record<AppUserRole, number> = {
+  viewer: 0,
+  editor: 1,
+  admin: 2,
+}
+
+function keepHigherRole(current: AppUserRole, incoming: AppUserRole): AppUserRole {
+  return rolePriority[incoming] > rolePriority[current] ? incoming : current
+}
+
 function fromMonthInputValue(value: string): { year: number; monthIndex: number } {
   const [yearText, monthText] = value.split('-')
   const year = Number(yearText)
@@ -148,9 +158,6 @@ function App() {
       return {}
     }
   })
-  const [manualOverrides, setManualOverrides] = useState<Record<string, string>>(() => {
-    return manualOverridesByMonth['2026-02'] ?? {}
-  })
   const [headerImage, setHeaderImage] = useState<HeaderImageState | null>(() => {
     const stored = localStorage.getItem('fruit-calendar-header-image')
     if (!stored) {
@@ -201,6 +208,7 @@ function App() {
   const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
   const cloudBootstrapStarted = useRef(false)
+  const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
 
   const isLocalDevHost =
     typeof window !== 'undefined' &&
@@ -218,6 +226,7 @@ function App() {
       const session = await initAuth()
       setAuthReady(true)
       setIsAuthenticated(session.authenticated)
+      setUserRole(session.role)
       setUserDisplayName(session.displayName ?? session.email)
       if (!session.authenticated) {
         setCloudStatus('loading')
@@ -251,7 +260,7 @@ function App() {
       setCloudStatus('loading')
       try {
         const remote = await fetchGroupState({ accessToken })
-        setUserRole(remote.role)
+        setUserRole((prev) => keepHigherRole(prev, remote.role))
         setUserProfileId(remote.userProfileId ?? null)
         if (remote.displayName) {
           setUserDisplayName(remote.displayName)
@@ -269,7 +278,7 @@ function App() {
             setSettingsPanelOpen,
             setStartChild,
             setExtraOffDaysText,
-            setManualOverrides,
+            setManualOverrides: () => {},
           })
         }
         setCloudStatus('ok')
@@ -336,15 +345,21 @@ function App() {
   }, [monthValue])
 
   useEffect(() => {
+    const forced = forcedMonthStartRef.current
+    if (forced && forced.monthValue === monthValue) {
+      setStartChild(forced.startChild)
+      setStartChildByMonth((prev) => ({
+        ...prev,
+        [monthValue]: forced.startChild,
+      }))
+      forcedMonthStartRef.current = null
+      return
+    }
     const remembered = startChildByMonth[monthValue]
     if (remembered) {
       setStartChild(remembered)
     }
   }, [monthValue, startChildByMonth])
-
-  useEffect(() => {
-    setManualOverrides(manualOverridesByMonth[monthValue] ?? {})
-  }, [monthValue, manualOverridesByMonth])
 
   useEffect(() => {
     try {
@@ -431,6 +446,7 @@ function App() {
     () => getMonthWorkingDays(year, monthIndex, extraOffDays),
     [year, monthIndex, extraOffDays],
   )
+  const manualOverrides = useMemo(() => manualOverridesByMonth[monthValue] ?? {}, [manualOverridesByMonth, monthValue])
 
   const monthResult = useMemo(() => {
     return generateAssignments({
@@ -455,84 +471,32 @@ function App() {
     })
   }, [exportTitle, weeks, headerImage, year, monthIndex])
 
-  const updateOverride = (dateKey: string, child: string): void => {
-    setManualOverrides((prev) => {
-      const cleanChildren = children.filter((name) => name.trim().length > 0)
-      if (cleanChildren.length === 0) {
-        return prev
-      }
-
-      let currentIndex = Math.max(cleanChildren.indexOf(startChild), 0)
-      const usedChildren = new Set<string>()
-      const next: Record<string, string> = {}
-      const normalizedChild = child.trim()
-      const hasManualTarget = normalizedChild.length > 0
-      const targetIndex = hasManualTarget ? cleanChildren.indexOf(normalizedChild) : -1
-
-      const findNextAvailableIndex = (fromIndex: number): number => {
-        for (let step = 0; step < cleanChildren.length; step += 1) {
-          const idx = (fromIndex + step) % cleanChildren.length
-          if (!usedChildren.has(cleanChildren[idx])) {
-            return idx
-          }
-        }
-        return -1
-      }
-
-      const lockedOverrides: Record<string, string> = {}
-      Object.entries(prev).forEach(([key, value]) => {
-        if (key !== dateKey) {
-          lockedOverrides[key] = value
-        }
-      })
-
-      workingDays.forEach((date) => {
-        const key = toDateKey(date)
-        const availableIndex = findNextAvailableIndex(currentIndex)
-        const plannedChild = availableIndex >= 0 ? cleanChildren[availableIndex] : ''
-        const locked = lockedOverrides[key]
-        const lockedIndex = locked ? cleanChildren.indexOf(locked) : -1
-
-        let assignedChild = plannedChild
-        if (key === dateKey && hasManualTarget && targetIndex >= 0 && !usedChildren.has(normalizedChild)) {
-          assignedChild = normalizedChild
-          next[key] = normalizedChild
-        } else if (lockedIndex >= 0) {
-          assignedChild = locked
-          next[key] = locked
-        } else if (key > dateKey && assignedChild) {
-          next[key] = assignedChild
-        }
-
-        if (assignedChild) {
-          usedChildren.add(assignedChild)
-          const assignedIndex = cleanChildren.indexOf(assignedChild)
-          currentIndex = (assignedIndex + 1) % cleanChildren.length
-        } else {
-          currentIndex = (currentIndex + 1) % cleanChildren.length
-        }
-      })
-
-      setManualOverridesByMonth((all) => ({
-        ...all,
-        [monthValue]: next,
-      }))
-      return next
-    })
-  }
-
   const continueWithNextMonth = (): void => {
     const next = addOneMonth(year, monthIndex)
     const nextMonthValue = `${next.year}-${`${next.monthIndex + 1}`.padStart(2, '0')}`
-    const nextSavedStart = startChildByMonth[nextMonthValue]
+    const nextStart = monthResult.nextStartChild || startChild
+    forcedMonthStartRef.current = { monthValue: nextMonthValue, startChild: nextStart }
+    const nextExtraOffDays = new Set(parseDateKeys(monthOffDaysByMonth[nextMonthValue] ?? ''))
+    const nextWorkingDays = getMonthWorkingDays(next.year, next.monthIndex, nextExtraOffDays)
+    const nextFirstWorkingDayKey = nextWorkingDays.length > 0 ? toDateKey(nextWorkingDays[0]) : null
     setStartChildByMonth((prev) => ({
       ...prev,
       [monthValue]: startChild,
-      // Never overwrite an already saved month start child.
-      [nextMonthValue]: prev[nextMonthValue] ?? monthResult.nextStartChild ?? startChild,
+      // Always continue from calculated next start child.
+      [nextMonthValue]: nextStart,
+    }))
+    setManualOverridesByMonth((prev) => ({
+      ...prev,
+      [nextMonthValue]: (() => {
+        const current = { ...(prev[nextMonthValue] ?? {}) }
+        if (nextFirstWorkingDayKey) {
+          delete current[nextFirstWorkingDayKey]
+        }
+        return current
+      })(),
     }))
     setMonthValue(nextMonthValue)
-    setStartChild(nextSavedStart ?? monthResult.nextStartChild ?? startChild)
+    setStartChild(nextStart)
   }
 
   const goToPreviousMonth = (): void => {
@@ -547,6 +511,60 @@ function App() {
     if (startChildByMonth[previousMonthValue]) {
       setStartChild(startChildByMonth[previousMonthValue])
     }
+  }
+
+  const updateOverride = (dateKey: string, child: string): void => {
+    setManualOverridesByMonth((prev) => {
+      const cleanChildren = children.filter((name) => name.trim().length > 0)
+      if (cleanChildren.length === 0) {
+        return prev
+      }
+
+      const normalizedChild = child.trim()
+      const editedChildIndex = cleanChildren.indexOf(normalizedChild)
+      if (editedChildIndex < 0) {
+        return prev
+      }
+
+      const monthOverrides = { ...(prev[monthValue] ?? {}) }
+      monthOverrides[dateKey] = normalizedChild
+
+      const blockedChild = normalizedChild
+      let currentIndex = (editedChildIndex + 1) % cleanChildren.length
+
+      const findNextIndexSkippingBlocked = (fromIndex: number): number => {
+        if (cleanChildren.length <= 1) {
+          return 0
+        }
+        for (let step = 0; step < cleanChildren.length; step += 1) {
+          const idx = (fromIndex + step) % cleanChildren.length
+          if (cleanChildren[idx] !== blockedChild) {
+            return idx
+          }
+        }
+        return -1
+      }
+
+      workingDays.forEach((date) => {
+        const key = toDateKey(date)
+        if (key <= dateKey) {
+          return
+        }
+        const nextIndex = findNextIndexSkippingBlocked(currentIndex)
+        if (nextIndex < 0) {
+          delete monthOverrides[key]
+          return
+        }
+        const nextChild = cleanChildren[nextIndex]
+        monthOverrides[key] = nextChild
+        currentIndex = (nextIndex + 1) % cleanChildren.length
+      })
+
+      return {
+        ...prev,
+        [monthValue]: monthOverrides,
+      }
+    })
   }
 
   const downloadPdf = async (): Promise<void> => {
@@ -674,7 +692,7 @@ function App() {
               </span>
             ) : null}
             <div className="ui-controls">
-              {KEYCLOAK_AUTH && !isAuthenticated ? (
+              {KEYCLOAK_AUTH && authReady && !isAuthenticated ? (
                 <button
                   type="button"
                   className="login-button-compact"
@@ -685,7 +703,7 @@ function App() {
                 </button>
               ) : null}
               {KEYCLOAK_AUTH && isAuthenticated ? (
-                <button type="button" className="toggle-button" onClick={doLogout}>
+                <button type="button" className="login-button-compact" onClick={doLogout}>
                   Kijelentkezés
                 </button>
               ) : null}
@@ -754,6 +772,11 @@ function App() {
                 setStartChildByMonth((prev) => ({
                   ...prev,
                   [monthValue]: value,
+                }))
+                // Start child change should regenerate month sequence from scratch.
+                setManualOverridesByMonth((prev) => ({
+                  ...prev,
+                  [monthValue]: {},
                 }))
               }}
             >
@@ -928,11 +951,7 @@ function App() {
                         <td key={item.dateKey}>
                           <div className="day">{item.date.getDate()}</div>
                           {canEdit ? (
-                            <select
-                              value={item.child}
-                              disabled={!canEdit}
-                              onChange={(e) => updateOverride(item.dateKey, e.target.value)}
-                            >
+                            <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
                               {children.map((name) => (
                                 <option key={`${item.dateKey}-${name}`} value={name}>
                                   {name}

@@ -22,15 +22,15 @@
         "http://localhost:5173/*",
         "http://localhost:5174/*",
         "https://*.github.io/*",
-        "https://gyumolcsnaptar.hu/*",
-        "https://app.gyumolcsnaptar.hu/*"
+        "https://gyuminaptar.hu/*",
+        "https://app.gyuminaptar.hu/*"
       ],
       "webOrigins": [
         "http://localhost:5173",
         "http://localhost:5174",
         "https://beatrixmarczell.github.io",
-        "https://gyumolcsnaptar.hu",
-        "https://app.gyumolcsnaptar.hu"
+        "https://gyuminaptar.hu",
+        "https://app.gyuminaptar.hu"
       ]
     }
   ],

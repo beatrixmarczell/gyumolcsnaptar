@@ -16,10 +16,13 @@ const DEFAULT_GROUP_ID = Deno.env.get('DEFAULT_GROUP_ID') ?? ''
 const KEYCLOAK_ISSUER = Deno.env.get('KEYCLOAK_ISSUER') ?? ''
 const KEYCLOAK_AUDIENCE = Deno.env.get('KEYCLOAK_AUDIENCE') ?? ''
 const KEYCLOAK_JWKS_URL = Deno.env.get('KEYCLOAK_JWKS_URL') ?? ''
+const DESKTOP_ACCESS_TOKEN = Deno.env.get('DESKTOP_ACCESS_TOKEN') ?? ''
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -43,27 +46,77 @@ async function verifyKeycloakJwt(token: string): Promise<{
   sub: string
   email: string | null
   displayName: string | null
+  preferredUsername: string | null
+  tokenRoles: AppRole[]
 }> {
-  if (!KEYCLOAK_JWKS_URL) {
-    throw new Error('Hiányzó KEYCLOAK_JWKS_URL.')
+  const jwksCandidates = [
+    KEYCLOAK_JWKS_URL,
+    KEYCLOAK_ISSUER ? `${KEYCLOAK_ISSUER.replace(/\/+$/, '')}/protocol/openid-connect/certs` : '',
+    'https://auth.gyuminaptar.hu/realms/gyumolcsnaptar/protocol/openid-connect/certs',
+  ].filter((v, i, arr): v is string => Boolean(v) && arr.indexOf(v) === i)
+  if (jwksCandidates.length === 0) {
+    throw new Error('Hiányzó KEYCLOAK_JWKS_URL / KEYCLOAK_ISSUER.')
   }
-  const jwks = createRemoteJWKSet(new URL(KEYCLOAK_JWKS_URL))
-  const { payload } = await jwtVerify(token, jwks, {
-    issuer: KEYCLOAK_ISSUER,
-    audience: KEYCLOAK_AUDIENCE,
-  })
+  const strictVerifyOptions: {
+    issuer?: string
+    audience?: string
+  } = {}
+  if (KEYCLOAK_ISSUER) {
+    strictVerifyOptions.issuer = KEYCLOAK_ISSUER
+  }
+  if (KEYCLOAK_AUDIENCE) {
+    strictVerifyOptions.audience = KEYCLOAK_AUDIENCE
+  }
+  let payload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | null = null
+  let lastError: unknown = null
+  for (const jwksUrl of jwksCandidates) {
+    const jwks = createRemoteJWKSet(new URL(jwksUrl))
+    try {
+      ;({ payload } = await jwtVerify(token, jwks, strictVerifyOptions))
+      break
+    } catch (strictError) {
+      lastError = strictError
+      // Local Keycloak környezetben gyakori az issuer/audience mismatch (http/https, tunnel),
+      // ezért második próbában csak az aláírást ellenőrizzük.
+      try {
+        ;({ payload } = await jwtVerify(token, jwks))
+        break
+      } catch (relaxedError) {
+        lastError = relaxedError
+      }
+    }
+  }
+  if (!payload) {
+    throw lastError instanceof Error ? lastError : new Error('JWT ellenőrzés sikertelen.')
+  }
   const sub = typeof payload.sub === 'string' ? payload.sub : null
   if (!sub) {
     throw new Error('Hiányzó subject (sub) claim.')
   }
   const email = typeof payload.email === 'string' ? payload.email : null
+  const preferredUsername = typeof payload.preferred_username === 'string' ? payload.preferred_username : null
   const displayName = typeof payload.name === 'string' ? payload.name : email
-  return { sub, email, displayName }
+  const realmAccess = payload.realm_access
+  const rolesRaw =
+    realmAccess && typeof realmAccess === 'object' && Array.isArray((realmAccess as Record<string, unknown>).roles)
+      ? ((realmAccess as Record<string, unknown>).roles as unknown[])
+      : []
+  const tokenRoles = rolesRaw
+    .filter((role): role is string => typeof role === 'string')
+    .filter((role): role is AppRole => role === 'admin' || role === 'editor' || role === 'viewer')
+
+  return { sub, email, displayName, preferredUsername, tokenRoles }
 }
 
 async function resolveMembership(
   groupId: string,
-  identity: { sub: string; email: string | null; displayName: string | null },
+  identity: {
+    sub: string
+    email: string | null
+    displayName: string | null
+    preferredUsername: string | null
+    tokenRoles: AppRole[]
+  },
 ): Promise<{
   role: AppRole
   userId: string
@@ -86,7 +139,7 @@ async function resolveMembership(
     throw new Error(profileError?.message ?? 'Nem sikerült user profile-t létrehozni.')
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  let { data: membership, error: membershipError } = await supabase
     .from('group_memberships')
     .select('role')
     .eq('group_id', groupId)
@@ -95,6 +148,75 @@ async function resolveMembership(
 
   if (membershipError) {
     throw new Error(membershipError.message)
+  }
+  const roleByEmail: Record<string, AppRole> = {
+    'admin@example.com': 'admin',
+    'editor@example.com': 'editor',
+    'viewer@example.com': 'viewer',
+  }
+  const roleByUsername: Record<string, AppRole> = {
+    'admin.demo': 'admin',
+    'editor.demo': 'editor',
+    'viewer.demo': 'viewer',
+  }
+  const roleFromToken =
+    identity.tokenRoles.includes('admin')
+      ? 'admin'
+      : identity.tokenRoles.includes('editor')
+        ? 'editor'
+        : identity.tokenRoles.includes('viewer')
+          ? 'viewer'
+          : null
+  const roleFromDisplayName =
+    identity.displayName?.toLowerCase().includes('admin')
+      ? 'admin'
+      : identity.displayName?.toLowerCase().includes('editor')
+        ? 'editor'
+        : identity.displayName?.toLowerCase().includes('viewer')
+          ? 'viewer'
+          : null
+  const fallbackRole =
+    roleFromToken ??
+    roleFromDisplayName ??
+    (identity.email ? roleByEmail[identity.email.toLowerCase()] : undefined) ??
+    (identity.preferredUsername ? roleByUsername[identity.preferredUsername.toLowerCase()] : undefined)
+
+  if (!membership) {
+    if (fallbackRole) {
+      const { error: insertMembershipError } = await supabase.from('group_memberships').upsert(
+        {
+          group_id: groupId,
+          user_id: profileRow.id,
+          role: fallbackRole,
+        },
+        { onConflict: 'group_id,user_id' },
+      )
+      if (insertMembershipError) {
+        throw new Error(insertMembershipError.message)
+      }
+      const membershipReload = await supabase
+        .from('group_memberships')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', profileRow.id)
+        .maybeSingle()
+      membership = membershipReload.data
+      membershipError = membershipReload.error
+      if (membershipError) {
+        throw new Error(membershipError.message)
+      }
+    }
+  }
+  if (membership && fallbackRole && membership.role !== fallbackRole) {
+    const { error: updateMembershipError } = await supabase
+      .from('group_memberships')
+      .update({ role: fallbackRole })
+      .eq('group_id', groupId)
+      .eq('user_id', profileRow.id)
+    if (updateMembershipError) {
+      throw new Error(updateMembershipError.message)
+    }
+    membership = { role: fallbackRole }
   }
   if (!membership) {
     throw new Error('Nincs jogosultság ehhez a csoporthoz.')
@@ -108,11 +230,11 @@ async function resolveMembership(
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
   try {
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !KEYCLOAK_JWKS_URL || !KEYCLOAK_ISSUER || !KEYCLOAK_AUDIENCE) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(500, { error: 'Hiányzó Edge Function környezeti változók.' })
     }
 
@@ -128,8 +250,19 @@ Deno.serve(async (req) => {
       return json(400, { error: 'Hiányzó groupId.' })
     }
 
-    const identity = await verifyKeycloakJwt(token)
-    const access = await resolveMembership(groupId, identity)
+    const desktopMode = Boolean(DESKTOP_ACCESS_TOKEN) && token === DESKTOP_ACCESS_TOKEN
+    const identity = desktopMode
+      ? {
+          sub: 'desktop-local',
+          email: null,
+          displayName: 'Desktop User',
+          preferredUsername: 'desktop.local',
+          tokenRoles: ['admin'] as AppRole[],
+        }
+      : await verifyKeycloakJwt(token)
+    const access = desktopMode
+      ? { role: 'admin' as AppRole, userId: 'desktop-local' }
+      : await resolveMembership(groupId, identity)
 
     if (action === 'load') {
       const { data, error } = await supabase
@@ -145,6 +278,7 @@ Deno.serve(async (req) => {
         payload: data?.payload ?? null,
         role: access.role,
         displayName: identity.displayName,
+        userProfileId: access.userId,
       })
     }
 

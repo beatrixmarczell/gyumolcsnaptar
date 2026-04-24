@@ -65,29 +65,15 @@ export function generateAssignments(params: {
   }
 
   let currentIndex = Math.max(clean.indexOf(startChild), 0)
-  const usedChildren = new Set<string>()
-
-  function findNextAvailableIndex(fromIndex: number): number {
-    for (let step = 0; step < clean.length; step += 1) {
-      const idx = (fromIndex + step) % clean.length
-      if (!usedChildren.has(clean[idx])) {
-        return idx
-      }
-    }
-    return -1
-  }
 
   const assignments = monthWorkingDays.map((date) => {
     const dateKey = toDateKey(date)
-    const availableIndex = findNextAvailableIndex(currentIndex)
-    const plannedChild = availableIndex >= 0 ? clean[availableIndex] : ''
     const overrideChild = manualOverrides[dateKey]
     const overrideIndex = overrideChild ? clean.indexOf(overrideChild) : -1
-    const canUseOverride = overrideIndex >= 0 && !usedChildren.has(overrideChild!)
-    const assignedChild = canUseOverride ? overrideChild! : plannedChild
+    const hasValidOverride = overrideIndex >= 0
+    const assignedChild = hasValidOverride ? overrideChild : clean[currentIndex] ?? ''
 
     if (assignedChild) {
-      usedChildren.add(assignedChild)
       const assignedIndex = clean.indexOf(assignedChild)
       currentIndex = (assignedIndex + 1) % clean.length
     } else {
