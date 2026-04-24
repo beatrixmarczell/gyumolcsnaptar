@@ -57,7 +57,14 @@ const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
-const APP_VERSION_DISPLAY = APP_VERSION.match(/^v\d+\.\d+\.\d+/)?.[0] ?? APP_VERSION
+const APP_VERSION_DISPLAY = (() => {
+  const match = APP_VERSION.match(/v?\d+\.\d+\.\d+/i)
+  if (!match) {
+    return APP_VERSION
+  }
+  const core = match[0].replace(/^v/i, '')
+  return `v${core}`
+})()
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -96,6 +103,15 @@ function normalizeMonthValue(value: string): string {
     return value
   }
   return `${year}-${`${month}`.padStart(2, '0')}`
+}
+
+function toMonthValue(year: number, monthIndex: number): string {
+  return `${year}-${`${monthIndex + 1}`.padStart(2, '0')}`
+}
+
+function addMonths(baseYear: number, baseMonthIndex: number, delta: number): { year: number; monthIndex: number } {
+  const date = new Date(baseYear, baseMonthIndex + delta, 1)
+  return { year: date.getFullYear(), monthIndex: date.getMonth() }
 }
 
 type ManualSaveSnapshot = {
@@ -255,6 +271,7 @@ function App() {
   })
   const [isManualSaveBusy, setIsManualSaveBusy] = useState(false)
   const [isRestoreBusy, setIsRestoreBusy] = useState(false)
+  const [childFilter, setChildFilter] = useState('')
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -506,6 +523,13 @@ function App() {
   )
   const manualOverrides = useMemo(() => manualOverridesByMonth[monthValue] ?? {}, [manualOverridesByMonth, monthValue])
   const excludedChildren = useMemo(() => excludedChildrenByMonth[monthValue] ?? [], [excludedChildrenByMonth, monthValue])
+  const filteredChild = useMemo(() => {
+    const normalized = childFilter.trim().toLowerCase()
+    if (!normalized) {
+      return ''
+    }
+    return children.find((name) => name.toLowerCase() === normalized) ?? ''
+  }, [childFilter, children])
 
   const monthResult = useMemo(() => {
     return generateAssignments({
@@ -568,6 +592,57 @@ function App() {
     const normalized = (userDisplayName ?? '').trim().toLowerCase()
     return normalized === 'admin.demo' || normalized === 'admin_demo' || normalized.includes('demo admin')
   }, [userDisplayName])
+  const childFilterMonths = useMemo(() => {
+    const monthSlots = [0, 1, 2].map((offset) => {
+      const slot = addMonths(year, monthIndex, offset)
+      const slotMonthValue = toMonthValue(slot.year, slot.monthIndex)
+      return {
+        ...slot,
+        monthValue: slotMonthValue,
+        label: monthLabel(slot.year, slot.monthIndex),
+      }
+    })
+
+    if (!filteredChild || children.length === 0) {
+      return monthSlots.map((slot) => ({
+        ...slot,
+        dates: [] as string[],
+      }))
+    }
+
+    let rollingStartChild = startChild
+    return monthSlots.map((slot, idx) => {
+      const slotOverrides = manualOverridesByMonth[slot.monthValue] ?? {}
+      const slotOffDays = new Set(parseDateKeys(monthOffDaysByMonth[slot.monthValue] ?? ''))
+      const slotWorkingDays = getMonthWorkingDays(slot.year, slot.monthIndex, slotOffDays)
+      const explicitStart = startChildByMonth[slot.monthValue]
+      const slotStartChild = idx === 0 ? startChild : explicitStart ?? rollingStartChild ?? children[0] ?? ''
+      const slotResult = generateAssignments({
+        children,
+        monthWorkingDays: slotWorkingDays,
+        startChild: slotStartChild,
+        manualOverrides: slotOverrides,
+        excludedChildren: [],
+      })
+      rollingStartChild = slotResult.nextStartChild || slotStartChild
+      const dates = slotResult.assignments
+        .filter((entry) => entry.child === filteredChild)
+        .map((entry) => toDateKey(entry.date))
+      return {
+        ...slot,
+        dates,
+      }
+    })
+  }, [
+    filteredChild,
+    children,
+    year,
+    monthIndex,
+    manualOverridesByMonth,
+    monthOffDaysByMonth,
+    startChildByMonth,
+    startChild,
+  ])
 
   const continueWithNextMonth = (): void => {
     const next = addOneMonth(year, monthIndex)
@@ -1127,6 +1202,43 @@ function App() {
 
         <div className="main-column">
           <section className="panel calendar-panel">
+            <div className="child-filter-panel">
+              <div className="child-filter-header">
+                <h3>Gyerek név szerinti szűrés (3 hónap)</h3>
+              </div>
+              <div className="child-filter-row">
+                <label className="child-filter-label">
+                  Gyerek neve
+                  <select value={childFilter} onChange={(e) => setChildFilter(e.target.value)}>
+                    <option value="">-- Válassz gyereket --</option>
+                    {children.map((name) => (
+                      <option key={`filter-${name}`} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" className="action-button secondary child-filter-clear" onClick={() => setChildFilter('')}>
+                  Szűrő ürítése
+                </button>
+              </div>
+              <div className="child-filter-results">
+                {childFilterMonths.map((item) => (
+                  <div className="child-filter-month-card" key={`filter-month-${item.monthValue}`}>
+                    <p className="child-filter-month-title">{item.label}</p>
+                    {filteredChild ? (
+                      item.dates.length > 0 ? (
+                        <p className="child-filter-dates">{item.dates.join(', ')}</p>
+                      ) : (
+                        <p className="child-filter-empty">Nincs hozzárendelt dátum ebben a hónapban.</p>
+                      )
+                    ) : (
+                      <p className="child-filter-empty">Válassz gyereket a dátumok listázásához.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="calendar-heading">
               <button
                 type="button"
