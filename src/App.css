@@ -1046,8 +1046,8 @@ input[type='file'] {
   }
 
   .ui-controls {
-    justify-items: end;
-    width: auto;
+    justify-items: start;
+    width: 100%;
     gap: 6px;
   }
 
@@ -1101,6 +1101,7 @@ input[type='file'] {
   td {
     padding: 4px 3px;
     white-space: nowrap;
+    overflow: hidden;
   }
 
   th {
@@ -1118,18 +1119,21 @@ input[type='file'] {
   }
 
   .day {
-    margin-bottom: 2px;
-    font-size: 0.78rem;
+    margin-bottom: 1px;
+    font-size: 0.72rem;
   }
 
   td select {
     min-width: 0;
     width: 100%;
     font-family: 'Outfit', 'Segoe UI', system-ui, sans-serif;
-    font-size: 0.7rem;
-    line-height: 1.2;
-    min-height: 28px;
-    padding: 3px 4px;
+    font-size: 0.62rem;
+    line-height: 1.15;
+    min-height: 24px;
+    padding: 2px 3px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
   }
 
   .child-filter-results {
