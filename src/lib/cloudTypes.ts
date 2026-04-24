@@ -26,4 +26,5 @@ export type CloudLoadResult = {
   payload: AppStatePayload | null
   role: AppUserRole
   displayName: string | null
+  userProfileId?: string | null
 }

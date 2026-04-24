@@ -10,6 +10,7 @@ export type GroupCalendarStateRow = {
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined)?.toLowerCase() ?? 'none'
+const desktopAccessToken = import.meta.env.VITE_DESKTOP_ACCESS_TOKEN as string | undefined
 
 let client: SupabaseClient | null = null
 
@@ -45,12 +46,30 @@ export function isCloudSyncAvailable(): boolean {
   return isSupabaseConfigured() && getDefaultGroupId() !== null
 }
 
-export function getAuthMode(): 'none' | 'keycloak' {
-  return authMode === 'keycloak' ? 'keycloak' : 'none'
+export function getAuthMode(): 'none' | 'keycloak' | 'desktop' {
+  if (authMode === 'keycloak') {
+    return 'keycloak'
+  }
+  if (authMode === 'desktop') {
+    return 'desktop'
+  }
+  return 'none'
 }
 
 export function isKeycloakAuthEnabled(): boolean {
   return getAuthMode() === 'keycloak'
+}
+
+export function isDesktopAuthEnabled(): boolean {
+  return getAuthMode() === 'desktop'
+}
+
+export function getDesktopAccessToken(): string | null {
+  if (!isDesktopAuthEnabled()) {
+    return null
+  }
+  const token = desktopAccessToken?.trim()
+  return token ? token : null
 }
 
 export function getFunctionUrl(functionName: string): string | null {
