@@ -54,7 +54,7 @@ const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.5.2'
+const APP_VERSION = 'v1.5.4'
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -650,7 +650,7 @@ function App() {
         <div className="title-row">
           <div className="title-start">
             <h1 className="app-title">
-              Gyümölcsnaptár <span className="group-name">(Zsiráf csoport)</span>
+              Gyümölcsnaptár <span className="group-name">- Zsiráf csoport</span>
             </h1>
           </div>
           <div className="title-end">
