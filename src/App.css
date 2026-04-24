@@ -169,7 +169,7 @@
 .title-end {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -829,6 +829,7 @@ td select {
   display: grid;
   justify-items: end;
   text-align: right;
+  min-width: 140px;
 }
 
 .inline-control select {
