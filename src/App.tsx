@@ -58,12 +58,12 @@ const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
 const APP_VERSION_DISPLAY = (() => {
-  const value = APP_VERSION.trim()
-  const match = value.match(/v?\d+\.\d+\.\d+/i)
-  if (match) {
-    return match[0].startsWith('v') ? match[0] : `v${match[0]}`
+  const match = APP_VERSION.match(/v?\d+\.\d+\.\d+/i)
+  if (!match) {
+    return APP_VERSION
   }
-  return value
+  const core = match[0].replace(/^v/i, '')
+  return `v${core}`
 })()
 
 const CLOUD_SYNC = isCloudSyncAvailable()
@@ -968,8 +968,6 @@ function App() {
             <h1 className="app-title">
               Gyümölcsnaptár <span className="group-name">- Zsiráf csoport</span>
             </h1>
-          </div>
-          <div className="title-end">
             <label className="inline-control compact-control appearance-control">
               Megjelenés
               <select
@@ -992,43 +990,43 @@ function App() {
                 <option value="dark">Sötét</option>
               </select>
             </label>
-            <div className="title-meta">
-              <span className="app-version-discrete" title="Alkalmazás verziója">
-                {APP_VERSION_DISPLAY}
+          </div>
+          <div className="title-end">
+            <span className="app-version-discrete" title="Alkalmazás verziója">
+              {APP_VERSION_DISPLAY}
+            </span>
+            {CLOUD_SYNC ? (
+              <span
+                className={`cloud-pill cloud-pill--${cloudStatus === 'ok' ? 'ok' : cloudStatus === 'err' ? 'err' : 'loading'}`}
+                title="Közös adat a Supabase felhőben. Mindenki, aki a linket használja, ugyanazt a mentést látja."
+              >
+                {cloudStatus === 'loading' && 'Felhő: betöltés…'}
+                {cloudStatus === 'ok' && 'Felhő: mentve'}
+                {cloudStatus === 'err' && 'Felhő: hiba'}
+                {cloudStatus === 'off' && 'Felhő: —'}
               </span>
-              {CLOUD_SYNC ? (
-                <span
-                  className={`cloud-pill cloud-pill--${cloudStatus === 'ok' ? 'ok' : cloudStatus === 'err' ? 'err' : 'loading'}`}
-                  title="Közös adat a Supabase felhőben. Mindenki, aki a linket használja, ugyanazt a mentést látja."
+            ) : null}
+            {KEYCLOAK_AUTH && isAuthenticated ? (
+              <span className="cloud-pill" title="Bejelentkezett felhasználó szerepkörrel.">
+                {authReady ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})` : 'Felhasználó: ellenőrzés…'}
+              </span>
+            ) : null}
+            <div className="ui-controls">
+              {KEYCLOAK_AUTH && authReady && !isAuthenticated ? (
+                <button
+                  type="button"
+                  className="login-button-compact"
+                  onClick={doLogin}
+                  disabled={!isKeycloakConfigured()}
                 >
-                  {cloudStatus === 'loading' && 'Felhő: betöltés…'}
-                  {cloudStatus === 'ok' && 'Felhő: mentve'}
-                  {cloudStatus === 'err' && 'Felhő: hiba'}
-                  {cloudStatus === 'off' && 'Felhő: —'}
-                </span>
+                  Bejelentkezés
+                </button>
               ) : null}
               {KEYCLOAK_AUTH && isAuthenticated ? (
-                <span className="cloud-pill" title="Bejelentkezett felhasználó szerepkörrel.">
-                  {authReady ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})` : 'Felhasználó: ellenőrzés…'}
-                </span>
+                <button type="button" className="login-button-compact" onClick={doLogout}>
+                  Kijelentkezés
+                </button>
               ) : null}
-              <div className="ui-controls">
-                {KEYCLOAK_AUTH && authReady && !isAuthenticated ? (
-                  <button
-                    type="button"
-                    className="login-button-compact"
-                    onClick={doLogin}
-                    disabled={!isKeycloakConfigured()}
-                  >
-                    Bejelentkezés
-                  </button>
-                ) : null}
-                {KEYCLOAK_AUTH && isAuthenticated ? (
-                  <button type="button" className="login-button-compact" onClick={doLogout}>
-                    Kijelentkezés
-                  </button>
-                ) : null}
-              </div>
             </div>
           </div>
         </div>
