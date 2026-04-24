@@ -744,6 +744,8 @@ th {
   font-size: 0.76rem;
   color: var(--text-secondary);
   font-weight: 600;
+  background: #f6f0ff;
+  border-right: 1px solid #e7d8ff;
 }
 
 .day {
@@ -823,6 +825,7 @@ td select {
   border-radius: 999px;
   opacity: 0.86;
   line-height: 1.2;
+  margin-left: auto;
 }
 
 .group-name {
