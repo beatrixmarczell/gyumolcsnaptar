@@ -57,6 +57,7 @@ const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
+const APP_VERSION_DISPLAY = APP_VERSION.match(/^v\d+\.\d+\.\d+/)?.[0] ?? APP_VERSION
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -888,7 +889,7 @@ function App() {
           </div>
           <div className="title-end">
             <span className="app-version-discrete" title="Alkalmazás verziója">
-              {APP_VERSION}
+              {APP_VERSION_DISPLAY}
             </span>
             {CLOUD_SYNC ? (
               <span

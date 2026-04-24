@@ -5,6 +5,10 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 function resolveAppVersion(): string {
+  const envVersion = (process.env.VITE_APP_VERSION ?? '').trim()
+  if (envVersion) {
+    return envVersion
+  }
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
   }
