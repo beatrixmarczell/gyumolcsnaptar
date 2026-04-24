@@ -819,7 +819,10 @@ td select {
 }
 
 .appearance-control {
-  margin: 0;
+  margin: 0 0 0 auto;
+  display: grid;
+  justify-items: end;
+  text-align: right;
 }
 
 .inline-control select {
@@ -1011,6 +1014,12 @@ input[type='file'] {
 
   .ui-controls {
     width: 100%;
+  }
+
+  .appearance-control {
+    margin-left: 0;
+    justify-items: start;
+    text-align: left;
   }
 }
 
