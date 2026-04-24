@@ -526,6 +526,64 @@ table {
   min-width: 0;
 }
 
+.calendar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.calendar-nav-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.calendar-title-button {
+  margin: 0;
+  width: auto;
+  border: 1px dashed var(--accent-border);
+  padding: 6px 12px;
+  background: var(--bg-surface-soft);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-title-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(30, 58, 138, 0.12);
+}
+
+.calendar-title-button:active {
+  transform: none;
+}
+
+.calendar-title-hint {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+.calendar-month-picker-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .calendar-panel table {
   min-width: 920px;
   table-layout: auto;

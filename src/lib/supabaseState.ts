@@ -87,6 +87,10 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
   ) {
     return null
   }
+  const excludedChildrenByMonth =
+    p.excludedChildrenByMonth && typeof p.excludedChildrenByMonth === 'object' && !Array.isArray(p.excludedChildrenByMonth)
+      ? (p.excludedChildrenByMonth as Record<string, unknown>)
+      : {}
 
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
@@ -95,6 +99,12 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
     startChildByMonth: parseStartChildByMonth(p.startChildByMonth, { '2026-02': 'Petrilla Ádám' }),
     monthOffDaysByMonth: p.monthOffDaysByMonth as Record<string, string>,
     manualOverridesByMonth: p.manualOverridesByMonth as Record<string, Record<string, string>>,
+    excludedChildrenByMonth: Object.fromEntries(
+      Object.entries(excludedChildrenByMonth).map(([month, value]) => [
+        month,
+        Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [],
+      ]),
+    ),
     headerImage: p.headerImage == null || !isHeaderImageState(p.headerImage) ? null : p.headerImage,
     uiTheme: p.uiTheme as AppStatePayload['uiTheme'],
     darkMode: p.darkMode,
@@ -272,6 +282,7 @@ export function applyAppStatePayload(
     setStartChildByMonth: (v: Record<string, string>) => void
     setMonthOffDaysByMonth: (v: Record<string, string>) => void
     setManualOverridesByMonth: (v: Record<string, Record<string, string>>) => void
+    setExcludedChildrenByMonth: (v: Record<string, string[]>) => void
     setHeaderImage: (v: HeaderImageState | null) => void
     setUiTheme: (v: 'elegant' | 'pastel' | 'minimal') => void
     setDarkMode: (v: boolean) => void
@@ -291,6 +302,7 @@ export function applyAppStatePayload(
     setStartChildByMonth,
     setMonthOffDaysByMonth,
     setManualOverridesByMonth,
+    setExcludedChildrenByMonth,
     setHeaderImage,
     setUiTheme,
     setDarkMode,
@@ -305,6 +317,7 @@ export function applyAppStatePayload(
   setStartChildByMonth(mergedStart)
   setMonthOffDaysByMonth(p.monthOffDaysByMonth)
   setManualOverridesByMonth(p.manualOverridesByMonth)
+  setExcludedChildrenByMonth(p.excludedChildrenByMonth ?? {})
   setHeaderImage(p.headerImage)
   setUiTheme(p.uiTheme)
   setDarkMode(p.darkMode)
@@ -321,6 +334,7 @@ export function buildAppStatePayload(s: {
   startChildByMonth: Record<string, string>
   monthOffDaysByMonth: Record<string, string>
   manualOverridesByMonth: Record<string, Record<string, string>>
+  excludedChildrenByMonth: Record<string, string[]>
   headerImage: HeaderImageState | null
   uiTheme: 'elegant' | 'pastel' | 'minimal'
   darkMode: boolean
@@ -333,6 +347,7 @@ export function buildAppStatePayload(s: {
     startChildByMonth: { ...s.startChildByMonth },
     monthOffDaysByMonth: { ...s.monthOffDaysByMonth },
     manualOverridesByMonth: { ...s.manualOverridesByMonth },
+    excludedChildrenByMonth: { ...s.excludedChildrenByMonth },
     headerImage: s.headerImage,
     uiTheme: s.uiTheme,
     darkMode: s.darkMode,

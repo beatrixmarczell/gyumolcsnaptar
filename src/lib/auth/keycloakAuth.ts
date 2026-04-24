@@ -146,7 +146,10 @@ export async function login(): Promise<void> {
   if (!keycloak) {
     await initAuth()
   }
-  await keycloak?.login({ redirectUri: `${window.location.origin}${window.location.pathname}` })
+  await keycloak?.login({
+    redirectUri: `${window.location.origin}${window.location.pathname}`,
+    prompt: 'login',
+  })
 }
 
 export async function logout(): Promise<void> {

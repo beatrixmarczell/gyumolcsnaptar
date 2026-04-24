@@ -53,15 +53,28 @@ export function generateAssignments(params: {
   monthWorkingDays: Date[]
   startChild: string
   manualOverrides: Record<string, string>
+  excludedChildren?: string[]
 }): {
   assignments: Assignment[]
   nextStartChild: string
 } {
-  const { children, monthWorkingDays, startChild, manualOverrides } = params
+  const { children, monthWorkingDays, startChild, manualOverrides, excludedChildren = [] } = params
   const clean = children.filter((name) => name.trim().length > 0)
 
   if (clean.length === 0) {
     return { assignments: [], nextStartChild: '' }
+  }
+
+  const excluded = new Set(excludedChildren)
+
+  const findNextAllowedIndex = (fromIndex: number): number => {
+    for (let step = 0; step < clean.length; step += 1) {
+      const idx = (fromIndex + step) % clean.length
+      if (!excluded.has(clean[idx])) {
+        return idx
+      }
+    }
+    return -1
   }
 
   let currentIndex = Math.max(clean.indexOf(startChild), 0)
@@ -71,7 +84,9 @@ export function generateAssignments(params: {
     const overrideChild = manualOverrides[dateKey]
     const overrideIndex = overrideChild ? clean.indexOf(overrideChild) : -1
     const hasValidOverride = overrideIndex >= 0
-    const assignedChild = hasValidOverride ? overrideChild : clean[currentIndex] ?? ''
+    const allowedIndex = findNextAllowedIndex(currentIndex)
+    const plannedChild = allowedIndex >= 0 ? clean[allowedIndex] : ''
+    const assignedChild = hasValidOverride ? overrideChild : plannedChild
 
     if (assignedChild) {
       const assignedIndex = clean.indexOf(assignedChild)
@@ -100,18 +115,18 @@ export function addOneMonth(year: number, monthIndex: number): {
 
 export function monthLabel(year: number, monthIndex: number): string {
   const huMonths = [
-    'Január',
-    'Február',
-    'Március',
-    'Április',
-    'Május',
-    'Június',
-    'Július',
-    'Augusztus',
-    'Szeptember',
-    'Október',
-    'November',
-    'December',
+    'január',
+    'február',
+    'március',
+    'április',
+    'május',
+    'június',
+    'július',
+    'augusztus',
+    'szeptember',
+    'október',
+    'november',
+    'december',
   ]
-  return `${huMonths[monthIndex]} ${year}`
+  return `${year}. ${huMonths[monthIndex]}`
 }

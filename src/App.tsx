@@ -48,13 +48,14 @@ const weekdays = ['Hétfő', 'Kedd', 'Szerda', 'Csütörtök', 'Péntek']
 const EXTRA_OFF_DAYS_STORAGE_KEY = 'fruit-calendar-extra-off-days-by-month'
 const START_CHILD_STORAGE_KEY = 'fruit-calendar-start-child-by-month'
 const MANUAL_OVERRIDES_STORAGE_KEY = 'fruit-calendar-manual-overrides-by-month'
+const EXCLUDED_CHILDREN_STORAGE_KEY = 'fruit-calendar-excluded-children-by-month'
 const CHILDREN_TEXT_STORAGE_KEY = 'fruit-calendar-children-text'
 const LAST_MONTH_STORAGE_KEY = 'fruit-calendar-last-month'
 const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
-const APP_VERSION = 'v1.5.4'
+const APP_VERSION = 'v1.6.0'
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -158,6 +159,26 @@ function App() {
       return {}
     }
   })
+  const [excludedChildrenByMonth, setExcludedChildrenByMonth] = useState<Record<string, string[]>>(() => {
+    try {
+      const stored = localStorage.getItem(EXCLUDED_CHILDREN_STORAGE_KEY)
+      if (!stored) {
+        return {}
+      }
+      const parsed = JSON.parse(stored) as Record<string, unknown>
+      if (!parsed || typeof parsed !== 'object') {
+        return {}
+      }
+      return Object.fromEntries(
+        Object.entries(parsed).map(([month, value]) => [
+          month,
+          Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [],
+        ]),
+      )
+    } catch {
+      return {}
+    }
+  })
   const [headerImage, setHeaderImage] = useState<HeaderImageState | null>(() => {
     const stored = localStorage.getItem('fruit-calendar-header-image')
     if (!stored) {
@@ -209,12 +230,11 @@ function App() {
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
+  const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
 
-  const isLocalDevHost =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  const canEdit =
-    isLocalDevHost || (KEYCLOAK_AUTH && isAuthenticated && (userRole === 'admin' || userRole === 'editor'))
+  const canEdit = KEYCLOAK_AUTH
+    ? isAuthenticated && (userRole === 'admin' || userRole === 'editor')
+    : true
   const themeModeValue = darkMode ? 'dark' : uiTheme
   const { year, monthIndex } = fromMonthInputValue(monthValue)
 
@@ -272,6 +292,7 @@ function App() {
             setStartChildByMonth,
             setMonthOffDaysByMonth,
             setManualOverridesByMonth,
+            setExcludedChildrenByMonth,
             setHeaderImage,
             setUiTheme,
             setDarkMode,
@@ -305,6 +326,7 @@ function App() {
       startChildByMonth,
       monthOffDaysByMonth,
       manualOverridesByMonth,
+      excludedChildrenByMonth,
       headerImage,
       uiTheme,
       darkMode,
@@ -325,6 +347,7 @@ function App() {
     startChildByMonth,
     monthOffDaysByMonth,
     manualOverridesByMonth,
+    excludedChildrenByMonth,
     headerImage,
     uiTheme,
     darkMode,
@@ -384,6 +407,14 @@ function App() {
       console.warn('Manual overrides localStorage save failed:', error)
     }
   }, [manualOverridesByMonth])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(EXCLUDED_CHILDREN_STORAGE_KEY, JSON.stringify(excludedChildrenByMonth))
+    } catch (error) {
+      console.warn('Excluded children localStorage save failed:', error)
+    }
+  }, [excludedChildrenByMonth])
 
   useEffect(() => {
     try {
@@ -447,6 +478,7 @@ function App() {
     [year, monthIndex, extraOffDays],
   )
   const manualOverrides = useMemo(() => manualOverridesByMonth[monthValue] ?? {}, [manualOverridesByMonth, monthValue])
+  const excludedChildren = useMemo(() => excludedChildrenByMonth[monthValue] ?? [], [excludedChildrenByMonth, monthValue])
 
   const monthResult = useMemo(() => {
     return generateAssignments({
@@ -454,8 +486,9 @@ function App() {
       monthWorkingDays: workingDays,
       startChild,
       manualOverrides,
+      excludedChildren: [],
     })
-  }, [children, workingDays, startChild, manualOverrides])
+  }, [children, workingDays, startChild, manualOverrides, excludedChildren])
   const weeks = useMemo(() => chunkByWeek(monthResult.assignments), [monthResult.assignments])
   const exportTitle = useMemo(() => {
     return `GYÜMÖLCSNAPTÁR - ${monthNameHuLong(monthIndex).toUpperCase()}`
@@ -495,6 +528,10 @@ function App() {
         return current
       })(),
     }))
+    setExcludedChildrenByMonth((prev) => ({
+      ...prev,
+      [nextMonthValue]: prev[nextMonthValue] ?? [],
+    }))
     setMonthValue(nextMonthValue)
     setStartChild(nextStart)
   }
@@ -514,13 +551,16 @@ function App() {
   }
 
   const updateOverride = (dateKey: string, child: string): void => {
+    const normalizedChild = child.trim()
+    if (!normalizedChild) {
+      return
+    }
     setManualOverridesByMonth((prev) => {
       const cleanChildren = children.filter((name) => name.trim().length > 0)
       if (cleanChildren.length === 0) {
         return prev
       }
 
-      const normalizedChild = child.trim()
       const editedChildIndex = cleanChildren.indexOf(normalizedChild)
       if (editedChildIndex < 0) {
         return prev
@@ -528,36 +568,59 @@ function App() {
 
       const monthOverrides = { ...(prev[monthValue] ?? {}) }
       monthOverrides[dateKey] = normalizedChild
+      const usedInMonth = new Set<string>()
+      let currentIndex = Math.max(cleanChildren.indexOf(startChild), 0)
 
-      const blockedChild = normalizedChild
-      let currentIndex = (editedChildIndex + 1) % cleanChildren.length
-
-      const findNextIndexSkippingBlocked = (fromIndex: number): number => {
-        if (cleanChildren.length <= 1) {
-          return 0
+      const resolveAssignedChild = (key: string): string => {
+        const override = monthOverrides[key]
+        const overrideIdx = override ? cleanChildren.indexOf(override) : -1
+        if (overrideIdx >= 0) {
+          currentIndex = (overrideIdx + 1) % cleanChildren.length
+          return override
         }
+        const autoChild = cleanChildren[currentIndex] ?? ''
+        const autoIdx = cleanChildren.indexOf(autoChild)
+        currentIndex = autoIdx >= 0 ? (autoIdx + 1) % cleanChildren.length : (currentIndex + 1) % cleanChildren.length
+        return autoChild
+      }
+
+      // First pass: honor existing assignments up to edited date, collect used children.
+      workingDays.forEach((date) => {
+        const key = toDateKey(date)
+        if (key > dateKey) {
+          return
+        }
+        const assigned = resolveAssignedChild(key)
+        if (assigned) {
+          usedInMonth.add(assigned)
+        }
+      })
+
+      const findNextNotUsedIndex = (fromIndex: number): number => {
         for (let step = 0; step < cleanChildren.length; step += 1) {
           const idx = (fromIndex + step) % cleanChildren.length
-          if (cleanChildren[idx] !== blockedChild) {
+          if (!usedInMonth.has(cleanChildren[idx])) {
             return idx
           }
         }
         return -1
       }
 
+      // Second pass: after edited date continue in order, skipping already used names in this month.
       workingDays.forEach((date) => {
         const key = toDateKey(date)
         if (key <= dateKey) {
           return
         }
-        const nextIndex = findNextIndexSkippingBlocked(currentIndex)
-        if (nextIndex < 0) {
+        const nextIdx = findNextNotUsedIndex(currentIndex)
+        if (nextIdx < 0) {
           delete monthOverrides[key]
           return
         }
-        const nextChild = cleanChildren[nextIndex]
+        const nextChild = cleanChildren[nextIdx]
         monthOverrides[key] = nextChild
-        currentIndex = (nextIndex + 1) % cleanChildren.length
+        usedInMonth.add(nextChild)
+        currentIndex = (nextIdx + 1) % cleanChildren.length
       })
 
       return {
@@ -636,6 +699,18 @@ function App() {
     void logout()
   }
 
+  const openCalendarMonthPicker = (): void => {
+    const picker = calendarMonthPickerRef.current as (HTMLInputElement & { showPicker?: () => void }) | null
+    if (!picker) {
+      return
+    }
+    try {
+      picker.showPicker?.()
+    } catch {
+      picker.click()
+    }
+  }
+
   const addExtraOffDay = (): void => {
     if (!offDayPickerValue) {
       return
@@ -651,6 +726,11 @@ function App() {
       ...prev,
       [monthValue]: next,
     }))
+    // Off-day changes must reflow daily assignments continuously.
+    setManualOverridesByMonth((prev) => ({
+      ...prev,
+      [monthValue]: {},
+    }))
   }
 
   const removeExtraOffDay = (dateKey: string): void => {
@@ -659,6 +739,11 @@ function App() {
     setMonthOffDaysByMonth((prev) => ({
       ...prev,
       [monthValue]: next,
+    }))
+    // Off-day changes must reflow daily assignments continuously.
+    setManualOverridesByMonth((prev) => ({
+      ...prev,
+      [monthValue]: {},
     }))
   }
 
@@ -748,18 +833,6 @@ function App() {
         {canEdit ? (
         <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
           <h2>Beállítások</h2>
-
-          <label>
-            Hónap
-            <input
-              type="month"
-              value={monthValue}
-              disabled={!canEdit}
-              onChange={(e) => {
-                setMonthValue(e.target.value)
-              }}
-            />
-          </label>
 
           <label>
             Kezdő gyerek
@@ -928,7 +1001,44 @@ function App() {
 
         <div className="main-column">
           <section className="panel calendar-panel">
-            <h2>{monthLabel(year, monthIndex)}</h2>
+            <div className="calendar-heading">
+              <button
+                type="button"
+                className="calendar-nav-button"
+                onClick={goToPreviousMonth}
+                aria-label="Előző hónap"
+                title="Előző hónap"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                className="calendar-title-button"
+                onClick={openCalendarMonthPicker}
+                aria-label="Hónap választás"
+                title="Kattints a hónap kiválasztásához"
+              >
+                <span>{monthLabel(year, monthIndex)}</span>
+                <span className="calendar-title-hint">📅</span>
+              </button>
+              <button
+                type="button"
+                className="calendar-nav-button"
+                onClick={continueWithNextMonth}
+                aria-label="Következő hónap"
+                title="Következő hónap"
+              >
+                ▶
+              </button>
+              <input
+                ref={calendarMonthPickerRef}
+                className="calendar-month-picker-input-hidden"
+                type="month"
+                value={monthValue}
+                onChange={(e) => setMonthValue(e.target.value)}
+                aria-label="Hónap választás"
+              />
+            </div>
             <table>
               <thead>
                 <tr>
@@ -969,12 +1079,6 @@ function App() {
               </tbody>
             </table>
             <div className="calendar-actions">
-              <button type="button" className="action-button" onClick={goToPreviousMonth}>
-                <span>◀</span> Előző hónap
-              </button>
-              <button type="button" className="action-button" onClick={continueWithNextMonth}>
-                <span>▶</span> Folytatás a következő hónappal
-              </button>
               <button type="button" className="action-button" onClick={downloadPdf}>
                 <span>🧾</span> Nyomtatás / PDF letöltés
               </button>

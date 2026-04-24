@@ -16,6 +16,7 @@ export type AppStatePayload = {
   startChildByMonth: Record<string, string>
   monthOffDaysByMonth: Record<string, string>
   manualOverridesByMonth: Record<string, Record<string, string>>
+  excludedChildrenByMonth?: Record<string, string[]>
   headerImage: HeaderImageState | null
   uiTheme: 'elegant' | 'pastel' | 'minimal'
   darkMode: boolean
