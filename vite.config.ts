@@ -4,22 +4,45 @@ import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+function extractSemverTag(value: string): string {
+  const match = value.match(/v?\d+\.\d+\.\d+/i)
+  if (!match) {
+    return ''
+  }
+  return match[0].startsWith('v') ? match[0] : `v${match[0]}`
+}
+
 function resolveAppVersion(): string {
   const envVersion = (process.env.VITE_APP_VERSION ?? '').trim()
-  if (envVersion) {
-    return envVersion
+  const normalizedEnvVersion = extractSemverTag(envVersion)
+  if (normalizedEnvVersion) {
+    return normalizedEnvVersion
   }
+
+  const vercelTag = (process.env.VERCEL_GIT_COMMIT_TAG ?? '').trim()
+  const normalizedVercelTag = extractSemverTag(vercelTag)
+  if (normalizedVercelTag) {
+    return normalizedVercelTag
+  }
+
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
   }
-  const packageVersion = packageJson.version ? `v${packageJson.version}` : 'v0.0.0'
+  const packageVersion = extractSemverTag(packageJson.version ?? '') || 'v0.0.0'
+
   try {
-    const tag = execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
+    const tag = execSync('git describe --tags --match \"v[0-9]*\" --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim()
-    return tag || packageVersion
+    const normalizedTag = extractSemverTag(tag)
+    return normalizedTag || packageVersion
   } catch {
-    return packageVersion
+    try {
+      const commitSha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+      return commitSha ? `${packageVersion}+${commitSha}` : packageVersion
+    } catch {
+      return packageVersion
+    }
   }
 }
 

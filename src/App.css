@@ -776,6 +776,30 @@ td select {
   padding: 5px 6px;
 }
 
+.dark-mode .calendar-panel td {
+  background: #1b2637;
+  color: #e5e7eb;
+}
+
+.dark-mode .calendar-panel td.empty {
+  background: #253349;
+}
+
+.dark-mode .calendar-panel td select {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: #4b5f7a;
+}
+
+.dark-mode .calendar-panel td select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.dark-mode .calendar-panel td > div:not(.day) {
+  color: #e5e7eb;
+}
+
 .empty {
   background: var(--bg-surface-soft);
 }
