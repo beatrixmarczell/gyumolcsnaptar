@@ -1687,17 +1687,14 @@ function buildResponsivePreviewHtml(contentHtml: string): string {
         if (!stage || !root) return;
         const fit = () => {
           root.style.transform = 'none';
-          root.style.marginLeft = '0px';
           const contentWidth = root.scrollWidth || 1;
           const availableWidth = stage.clientWidth || 1;
           const scale = Math.min(1, availableWidth / contentWidth);
-          root.style.transform = 'scale(' + scale + ')';
           root.style.width = contentWidth + 'px';
           const scaledWidth = contentWidth * scale;
           const isMobile = window.matchMedia('(max-width: 760px)').matches;
-          if (!isMobile && scaledWidth < availableWidth) {
-            root.style.marginLeft = Math.floor((availableWidth - scaledWidth) / 2) + 'px';
-          }
+          const offsetX = !isMobile && scaledWidth < availableWidth ? Math.floor((availableWidth - scaledWidth) / 2) : 0;
+          root.style.transform = 'translateX(' + offsetX + 'px) scale(' + scale + ')';
           const contentHeight = root.scrollHeight || 0;
           const scaledHeight = Math.ceil(contentHeight * scale);
           stage.style.height = scaledHeight + 'px';
