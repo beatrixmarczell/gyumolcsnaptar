@@ -23,6 +23,18 @@ function resolveReleaseChannel(appVersion: string): 'stable' | 'next' {
     return 'next'
   }
 
+  try {
+    const localBranch = execSync('git rev-parse --abbrev-ref HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
+      .toLowerCase()
+    if (localBranch === 'next/v3' || localBranch.startsWith('next/')) {
+      return 'next'
+    }
+  } catch {
+    // Ignore local git branch lookup failures and continue with other heuristics.
+  }
+
   if (/(alpha|beta|rc)/i.test(appVersion)) {
     return 'next'
   }
