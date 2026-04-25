@@ -1,54 +1,67 @@
-# Versioning and Rollback
+# Versioning and Release Flow
 
-This project uses:
-- GitHub commits for detailed history
-- Git tags for stable checkpoints
-- GitHub Releases for readable change summaries
-- Vercel for production deployment
+This project now runs with two long-lived lines:
+- `master` for stable production (`gyuminaptar.hu`)
+- `next/v3` for large upcoming changes (`next.gyuminaptar.hu`)
 
-## Recommended release flow
+## Version policy
 
-1. Commit changes to `master`.
-2. Wait for the **CI Build Check** workflow to pass.
-3. Create an annotated tag with a meaningful message:
+- Stable line (`master`): `v2.x.y-*`
+- Next line (`next/v3`): `v3.0.0-alpha.N`, later `beta.N`, then `rc.N`
+- First next checkpoint tag: `v3.0.0-alpha.1`
+
+## Stable release checklist (`master`)
+
+1. Make and test fixes on `master` only.
+2. Push branch updates to origin.
+3. Create annotated stable tag:
 
 ```bash
-git tag -a v1.5.0 -m "Public read-only mode with Keycloak login entry."
-git push origin v1.5.0
+git tag -a v2.0.11-stable-fix-name -m "Short stable fix summary."
+git push origin v2.0.11-stable-fix-name
 ```
 
-4. GitHub will auto-create a Release from the tag.
+4. Deploy to production:
 
-## Naming suggestions
+```bash
+vercel --prod --yes --build-env "VITE_APP_VERSION=v2.0.11"
+```
 
-- `v1.5.0-readonly-public-view`
-- `v1.5.1-cloud-read-fix`
-- `v1.6.0-parent-login-foundation`
+## Next release checklist (`next/v3`)
 
-Keep tags short and understandable by non-developers.
+1. Work only in the separate `next/v3` worktree folder.
+2. Push branch updates to origin `next/v3`.
+3. Create annotated next milestone tag:
+
+```bash
+git tag -a v3.0.0-alpha.2 -m "v3 milestone summary."
+git push origin v3.0.0-alpha.2
+```
+
+4. Deploy for next subdomain preview:
+
+```bash
+vercel --yes --build-env "VITE_APP_VERSION=v3.0.0-alpha.2"
+```
+
+## Local separation
+
+- Stable workspace: `Gyumolcsnaptar` (branch `master`)
+- Next workspace: `Gyumolcsnaptar-next` (branch `next/v3`)
+- Keep separate `.env.local` values per workspace if needed.
 
 ## Rollback options
 
-### Fast local rollback to a known tag
+### Fast local rollback to known tag
 
 ```bash
-git checkout v1.5.0
+git checkout v2.0.10-web-preview-real-center-hotfix
 ```
 
-### Restore `master` to a known tag with a new commit (safe history)
+### Safe rollback on `master` with new commit
 
 ```bash
 git checkout master
 git revert --no-edit <bad_commit_sha>
 git push origin master
 ```
-
-### Force reset master to an old tag (dangerous; avoid unless agreed)
-
-```bash
-git checkout master
-git reset --hard v1.5.0
-git push --force origin master
-```
-
-Use the force option only when absolutely necessary and coordinated.
