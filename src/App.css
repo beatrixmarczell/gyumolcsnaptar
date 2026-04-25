@@ -846,6 +846,16 @@ td select {
   margin: 0;
 }
 
+.appearance-control-web {
+  display: inline-grid;
+  margin-top: 4px;
+  align-self: flex-end;
+}
+
+.appearance-control-mobile {
+  display: none;
+}
+
 .inline-control select {
   min-width: 150px;
   padding: 6px 8px;
@@ -1036,6 +1046,7 @@ input[type='file'] {
   .ui-controls {
     width: 100%;
   }
+
 }
 
 @media (max-width: 1280px) {
@@ -1097,6 +1108,14 @@ input[type='file'] {
     justify-items: start;
     width: 100%;
     gap: 6px;
+  }
+
+  .appearance-control-mobile {
+    display: inline-grid;
+  }
+
+  .appearance-control-web {
+    display: none;
   }
 
   .compact-control,

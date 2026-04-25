@@ -968,7 +968,7 @@ function App() {
             <h1 className="app-title">
               Gyümölcsnaptár <span className="group-name">- Zsiráf csoport</span>
             </h1>
-            <label className="inline-control compact-control appearance-control">
+            <label className="inline-control compact-control appearance-control appearance-control-mobile">
               Megjelenés
               <select
                 value={themeModeValue}
@@ -1028,6 +1028,28 @@ function App() {
                 </button>
               ) : null}
             </div>
+            <label className="inline-control compact-control appearance-control appearance-control-web">
+              Megjelenés
+              <select
+                value={themeModeValue}
+                onChange={(e) => {
+                  const selected = e.target.value
+                  if (selected === 'dark') {
+                    setDarkMode(true)
+                    return
+                  }
+                  if (selected === 'elegant' || selected === 'pastel' || selected === 'minimal') {
+                    setUiTheme(selected)
+                    setDarkMode(false)
+                  }
+                }}
+              >
+                <option value="elegant">Elegant</option>
+                <option value="pastel">Pasztell</option>
+                <option value="minimal">Minimal</option>
+                <option value="dark">Sötét</option>
+              </select>
+            </label>
           </div>
         </div>
       </header>
