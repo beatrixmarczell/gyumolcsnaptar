@@ -1676,6 +1676,7 @@ function buildResponsivePreviewHtml(contentHtml: string): string {
       #preview-stage {
         width: 100%;
         overflow: hidden;
+        display: flex;
       }
       #preview-root {
         transform-origin: top left;
@@ -1698,10 +1699,9 @@ function buildResponsivePreviewHtml(contentHtml: string): string {
           const availableWidth = stage.clientWidth || 1;
           const scale = Math.min(1, availableWidth / contentWidth);
           root.style.width = contentWidth + 'px';
-          const scaledWidth = contentWidth * scale;
           const isMobile = window.matchMedia('(max-width: 760px)').matches;
-          const offsetX = !isMobile && scaledWidth < availableWidth ? Math.floor((availableWidth - scaledWidth) / 2) : 0;
-          root.style.transform = 'translateX(' + offsetX + 'px) scale(' + scale + ')';
+          stage.style.justifyContent = isMobile ? 'flex-start' : 'center';
+          root.style.transform = 'scale(' + scale + ')';
           const contentHeight = root.scrollHeight || 0;
           const scaledHeight = Math.ceil(contentHeight * scale);
           stage.style.height = scaledHeight + 'px';
