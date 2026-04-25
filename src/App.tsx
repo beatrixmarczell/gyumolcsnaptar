@@ -57,6 +57,7 @@ const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
+const APP_CHANNEL = __APP_CHANNEL__
 const APP_VERSION_DISPLAY = (() => {
   const match = APP_VERSION.match(/v?\d+\.\d+\.\d+/i)
   if (!match) {
@@ -65,6 +66,7 @@ const APP_VERSION_DISPLAY = (() => {
   const core = match[0].replace(/^v/i, '')
   return `v${core}`
 })()
+const IS_NEXT_CHANNEL = APP_CHANNEL === 'next'
 
 const CLOUD_SYNC = isCloudSyncAvailable()
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
@@ -992,6 +994,11 @@ function App() {
             </label>
           </div>
           <div className="title-end">
+            {IS_NEXT_CHANNEL ? (
+              <span className="release-channel-badge" title="Következő (fejlesztői) kiadás">
+                NEXT
+              </span>
+            ) : null}
             <span className="app-version-discrete" title="Alkalmazás verziója">
               {APP_VERSION_DISPLAY}
             </span>
