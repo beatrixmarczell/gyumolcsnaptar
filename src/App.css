@@ -263,18 +263,23 @@
   transition:
     transform 0.28s ease,
     opacity 0.22s ease,
+    max-height 0.28s ease,
     padding 0.28s ease,
     border-color 0.22s ease,
     box-shadow 0.22s ease;
   transform: translateX(0);
   opacity: 1;
+  max-height: 5000px;
 }
 
 .settings-panel.collapsed {
   transform: translateX(-120%);
   opacity: 0;
   pointer-events: none;
+  max-height: 0;
   padding: 0;
+  margin: 0;
+  border-width: 0;
   border-color: transparent;
   box-shadow: none;
 }
@@ -292,6 +297,11 @@
   align-items: center;
   justify-content: center;
   font-size: 0.95rem;
+}
+
+.sidebar-toggle-label,
+.sidebar-toggle-icon-mobile {
+  display: none;
 }
 
 .layout.sidebar-collapsed .sidebar-toggle {
@@ -607,6 +617,14 @@ table {
   color: var(--text-primary);
   font-weight: 700;
   font-size: 0.84rem;
+}
+
+.mobile-panel-toggle {
+  display: none;
+}
+
+.mobile-panel-content.mobile-collapsed {
+  display: none;
 }
 
 .child-filter-dates,
@@ -1133,16 +1151,56 @@ input[type='file'] {
   }
 
   .sidebar-toggle {
+    display: flex;
+    position: static;
+    left: auto;
+    top: auto;
+    width: 100%;
+    height: auto;
+    min-height: 34px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    line-height: 1.2;
+  }
+
+  .layout.sidebar-collapsed .sidebar-toggle {
+    left: auto;
+  }
+
+  .sidebar-toggle-label,
+  .sidebar-toggle-icon-mobile {
+    display: inline;
+  }
+
+  .sidebar-toggle-icon-desktop {
     display: none;
   }
 
-  .settings-panel.collapsed {
-    transform: none;
-    opacity: 1;
-    pointer-events: auto;
-    padding: 14px;
-    border-color: var(--border);
-    box-shadow: var(--shadow);
+  .mobile-panel-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--bg-surface-soft);
+    border: 1px solid var(--border);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .mobile-panel-content.mobile-collapsed {
+    display: none;
+  }
+
+  .child-filter-panel > .mobile-panel-content > .child-filter-header {
+    display: none;
   }
 
   .title,

@@ -282,6 +282,7 @@ function App() {
   const [isManualSaveBusy, setIsManualSaveBusy] = useState(false)
   const [isRestoreBusy, setIsRestoreBusy] = useState(false)
   const [childFilter, setChildFilter] = useState('')
+  const [childFilterPanelOpen, setChildFilterPanelOpen] = useState(true)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -1184,7 +1185,9 @@ function App() {
           aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
           title={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
         >
-          {settingsPanelOpen ? '◀' : '▶'}
+          <span className="sidebar-toggle-label">Beállítások</span>
+          <span className="sidebar-toggle-icon-desktop">{settingsPanelOpen ? '◀' : '▶'}</span>
+          <span className="sidebar-toggle-icon-mobile">{settingsPanelOpen ? '▲' : '▼'}</span>
         </button>
         {canEdit ? (
         <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
@@ -1262,40 +1265,51 @@ function App() {
         <div className="main-column">
           <section className="panel calendar-panel">
             <div className="child-filter-panel">
-              <div className="child-filter-header">
-                <h3>Gyerek név szerinti szűrés (3 hónap)</h3>
-              </div>
-              <div className="child-filter-row">
-                <label className="child-filter-label">
-                  Gyerek neve
-                  <select value={childFilter} onChange={(e) => setChildFilter(e.target.value)}>
-                    <option value="">-- Válassz gyereket --</option>
-                    {children.map((name) => (
-                      <option key={`filter-${name}`} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" className="action-button secondary child-filter-clear" onClick={() => setChildFilter('')}>
-                  Szűrő ürítése
-                </button>
-              </div>
-              <div className="child-filter-results">
-                {childFilterMonths.map((item) => (
-                  <div className="child-filter-month-card" key={`filter-month-${item.monthValue}`}>
-                    <p className="child-filter-month-title">{item.label}</p>
-                    {filteredChild ? (
-                      item.dates.length > 0 ? (
-                        <p className="child-filter-dates">{item.dates.join(', ')}</p>
+              <button
+                type="button"
+                className="mobile-panel-toggle"
+                onClick={() => setChildFilterPanelOpen((prev) => !prev)}
+                aria-label={childFilterPanelOpen ? 'Gyerek szűrő panel becsukása' : 'Gyerek szűrő panel kinyitása'}
+              >
+                <span>Gyerek név szerinti szűrés (3 hónap)</span>
+                <span>{childFilterPanelOpen ? '▲' : '▼'}</span>
+              </button>
+              <div className={`mobile-panel-content ${childFilterPanelOpen ? '' : 'mobile-collapsed'}`}>
+                <div className="child-filter-header">
+                  <h3>Gyerek név szerinti szűrés (3 hónap)</h3>
+                </div>
+                <div className="child-filter-row">
+                  <label className="child-filter-label">
+                    Gyerek neve
+                    <select value={childFilter} onChange={(e) => setChildFilter(e.target.value)}>
+                      <option value="">-- Válassz gyereket --</option>
+                      {children.map((name) => (
+                        <option key={`filter-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className="action-button secondary child-filter-clear" onClick={() => setChildFilter('')}>
+                    Szűrő ürítése
+                  </button>
+                </div>
+                <div className="child-filter-results">
+                  {childFilterMonths.map((item) => (
+                    <div className="child-filter-month-card" key={`filter-month-${item.monthValue}`}>
+                      <p className="child-filter-month-title">{item.label}</p>
+                      {filteredChild ? (
+                        item.dates.length > 0 ? (
+                          <p className="child-filter-dates">{item.dates.join(', ')}</p>
+                        ) : (
+                          <p className="child-filter-empty">Nincs hozzárendelt dátum ebben a hónapban.</p>
+                        )
                       ) : (
-                        <p className="child-filter-empty">Nincs hozzárendelt dátum ebben a hónapban.</p>
-                      )
-                    ) : (
-                      <p className="child-filter-empty">Válassz gyereket a dátumok listázásához.</p>
-                    )}
-                  </div>
-                ))}
+                        <p className="child-filter-empty">Válassz gyereket a dátumok listázásához.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="calendar-heading">
