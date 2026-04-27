@@ -332,6 +332,8 @@ function App() {
   const [swapOfferDateByRequest, setSwapOfferDateByRequest] = useState<Record<string, string>>({})
   const [swapBusy, setSwapBusy] = useState(false)
   const [showClosedSwapRequests] = useState(false)
+  const [swapPanelOpen, setSwapPanelOpen] = useState(true)
+  const [childFilterPanelOpen, setChildFilterPanelOpen] = useState(true)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -1489,7 +1491,9 @@ function App() {
           aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
           title={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
         >
-          {settingsPanelOpen ? '◀' : '▶'}
+          <span className="sidebar-toggle-label">Beállítások</span>
+          <span className="sidebar-toggle-icon-desktop">{settingsPanelOpen ? '◀' : '▶'}</span>
+          <span className="sidebar-toggle-icon-mobile">{settingsPanelOpen ? '▲' : '▼'}</span>
         </button>
         {canEdit ? (
         <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
@@ -1567,36 +1571,46 @@ function App() {
         <div className="main-column">
           {swapAdminTestEnabled ? (
             <section className="panel swap-admin-panel">
-              <h2>Parent Swap (Admin Test Mode)</h2>
-              <div className="swap-request-create-card">
-                <p className="swap-request-create-title">Csere igénylés:</p>
-                <div className="swap-admin-actions">
-                  <label>
-                    Kérés dátuma
-                    <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
-                      <option value="">-- Válassz dátumot --</option>
-                      {monthDateKeys.map((key) => (
-                        <option key={`request-date-${key}`} value={key}>
-                          {key}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="action-button swap-primary-action"
-                    disabled={swapBusy || !swapRequestDateKey}
-                    onClick={() => void handleCreateSwapRequest()}
-                  >
-                    Csere kérés indítása
-                  </button>
+              <button
+                type="button"
+                className="mobile-panel-toggle"
+                onClick={() => setSwapPanelOpen((prev) => !prev)}
+                aria-label={swapPanelOpen ? 'Csere panel becsukása' : 'Csere panel kinyitása'}
+              >
+                <span>Parent Swap (Admin Test Mode)</span>
+                <span>{swapPanelOpen ? '▲' : '▼'}</span>
+              </button>
+              <div className={`mobile-panel-content ${swapPanelOpen ? '' : 'mobile-collapsed'}`}>
+                <h2>Parent Swap (Admin Test Mode)</h2>
+                <div className="swap-request-create-card">
+                  <p className="swap-request-create-title">Csere igénylés:</p>
+                  <div className="swap-admin-actions">
+                    <label>
+                      Kérés dátuma
+                      <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
+                        <option value="">-- Válassz dátumot --</option>
+                        {monthDateKeys.map((key) => (
+                          <option key={`request-date-${key}`} value={key}>
+                            {key}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="action-button swap-primary-action"
+                      disabled={swapBusy || !swapRequestDateKey}
+                      onClick={() => void handleCreateSwapRequest()}
+                    >
+                      Csere kérés indítása
+                    </button>
+                  </div>
                 </div>
-              </div>
-              {swapError ? <p className="cloud-pill cloud-pill--err">{swapError}</p> : null}
-              {swapLoading ? <p className="compact-note">Swap lista betöltése…</p> : null}
-              <div className="swap-request-list">
-                {visibleSwapRequests.map((request) => (
-                  <article key={request.id} className="swap-request-card">
+                {swapError ? <p className="cloud-pill cloud-pill--err">{swapError}</p> : null}
+                {swapLoading ? <p className="compact-note">Swap lista betöltése…</p> : null}
+                <div className="swap-request-list">
+                  {visibleSwapRequests.map((request) => (
+                    <article key={request.id} className="swap-request-card">
                     <p
                       title="A név a naptár jelenlegi hozzárendelése a kérés napján (nem a szerveren eltárolt kérés-szöveg)."
                     >
@@ -1704,47 +1718,59 @@ function App() {
                         </li>
                       ))}
                     </ul>
-                  </article>
-                ))}
+                    </article>
+                  ))}
+                </div>
               </div>
             </section>
           ) : null}
           <section className="panel calendar-panel">
             <div className="child-filter-panel">
-              <div className="child-filter-header">
-                <h3>Gyerek név szerinti szűrés (3 hónap)</h3>
-              </div>
-              <div className="child-filter-row">
-                <label className="child-filter-label">
-                  Gyerek neve
-                  <select value={childFilter} onChange={(e) => setChildFilter(e.target.value)}>
-                    <option value="">-- Válassz gyereket --</option>
-                    {children.map((name) => (
-                      <option key={`filter-${name}`} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" className="action-button secondary child-filter-clear" onClick={() => setChildFilter('')}>
-                  Szűrő ürítése
-                </button>
-              </div>
-              <div className="child-filter-results">
-                {childFilterMonths.map((item) => (
-                  <div className="child-filter-month-card" key={`filter-month-${item.monthValue}`}>
-                    <p className="child-filter-month-title">{item.label}</p>
-                    {filteredChild ? (
-                      item.dates.length > 0 ? (
-                        <p className="child-filter-dates">{item.dates.join(', ')}</p>
+              <button
+                type="button"
+                className="mobile-panel-toggle"
+                onClick={() => setChildFilterPanelOpen((prev) => !prev)}
+                aria-label={childFilterPanelOpen ? 'Gyerek szűrő panel becsukása' : 'Gyerek szűrő panel kinyitása'}
+              >
+                <span>Gyerek név szerinti szűrés (3 hónap)</span>
+                <span>{childFilterPanelOpen ? '▲' : '▼'}</span>
+              </button>
+              <div className={`mobile-panel-content ${childFilterPanelOpen ? '' : 'mobile-collapsed'}`}>
+                <div className="child-filter-header">
+                  <h3>Gyerek név szerinti szűrés (3 hónap)</h3>
+                </div>
+                <div className="child-filter-row">
+                  <label className="child-filter-label">
+                    Gyerek neve
+                    <select value={childFilter} onChange={(e) => setChildFilter(e.target.value)}>
+                      <option value="">-- Válassz gyereket --</option>
+                      {children.map((name) => (
+                        <option key={`filter-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className="action-button secondary child-filter-clear" onClick={() => setChildFilter('')}>
+                    Szűrő ürítése
+                  </button>
+                </div>
+                <div className="child-filter-results">
+                  {childFilterMonths.map((item) => (
+                    <div className="child-filter-month-card" key={`filter-month-${item.monthValue}`}>
+                      <p className="child-filter-month-title">{item.label}</p>
+                      {filteredChild ? (
+                        item.dates.length > 0 ? (
+                          <p className="child-filter-dates">{item.dates.join(', ')}</p>
+                        ) : (
+                          <p className="child-filter-empty">Nincs hozzárendelt dátum ebben a hónapban.</p>
+                        )
                       ) : (
-                        <p className="child-filter-empty">Nincs hozzárendelt dátum ebben a hónapban.</p>
-                      )
-                    ) : (
-                      <p className="child-filter-empty">Válassz gyereket a dátumok listázásához.</p>
-                    )}
-                  </div>
-                ))}
+                        <p className="child-filter-empty">Válassz gyereket a dátumok listázásához.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="calendar-heading">
