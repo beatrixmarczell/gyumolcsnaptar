@@ -1190,8 +1190,19 @@ function App() {
           <span className="sidebar-toggle-icon-mobile">{settingsPanelOpen ? '▲' : '▼'}</span>
         </button>
         {canEdit ? (
-        <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
-          <h2>Beállítások</h2>
+        <div className="settings-panel-shell">
+          <button
+            type="button"
+            className="mobile-panel-toggle settings-mobile-toggle"
+            onClick={() => setSettingsPanelOpen((prev) => !prev)}
+            aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
+          >
+            <span>Beállítások</span>
+            <span>{settingsPanelOpen ? '▲' : '▼'}</span>
+          </button>
+          <div className={`mobile-panel-content ${settingsPanelOpen ? '' : 'mobile-collapsed'}`}>
+          <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
+            <h2>Beállítások</h2>
 
           <details className="collapsible-box">
             <summary>Névsor (1 sor = 1 név)</summary>
@@ -1259,7 +1270,9 @@ function App() {
               <p className="compact-note">Nincs fejléckép betöltve.</p>
             )}
           </details>
-        </aside>
+          </aside>
+          </div>
+        </div>
         ) : null}
 
         <div className="main-column">
