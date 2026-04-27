@@ -1865,13 +1865,16 @@ function App() {
                           ) : null}
                           {canEdit ? (
                             item.child ? (
-                              <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
-                                {children.map((name) => (
-                                  <option key={`${item.dateKey}-${name}`} value={name}>
-                                    {name}
-                                  </option>
-                                ))}
-                              </select>
+                              <>
+                                <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
+                                  {children.map((name) => (
+                                    <option key={`${item.dateKey}-${name}`} value={name}>
+                                      {name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="mobile-selected-name">{item.child}</div>
+                              </>
                             ) : (
                               <div className="offday-cell">
                                 {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
