@@ -600,14 +600,18 @@ function App() {
       title: exportTitle,
       weekdays,
       weeks,
+      offDayDateKeys: new Set(extraOffDayList),
       headerImage,
       displayYear: year,
       displayMonthIndex: monthIndex,
     })
-  }, [exportTitle, weeks, headerImage, year, monthIndex])
+  }, [exportTitle, weeks, extraOffDayList, headerImage, year, monthIndex])
   const printPreviewFrameHtml = useMemo(() => {
     return buildResponsivePreviewHtml(printPreviewHtml)
   }, [printPreviewHtml])
+  const printPreviewFrameKey = useMemo(() => {
+    return `${monthValue}:${extraOffDaysText}:${JSON.stringify(manualOverrides)}:${printPreviewHtml.length}`
+  }, [monthValue, extraOffDaysText, manualOverrides, printPreviewHtml])
   const currentPayload = useMemo(
     () =>
       buildAppStatePayload({
@@ -1422,6 +1426,7 @@ function App() {
                       if (!item) {
                         return <td key={`empty-${weekIdx}-${idx}`} className="empty"></td>
                       }
+                      const isOffDay = extraOffDays.has(item.dateKey)
                       return (
                         <td key={item.dateKey} className={item.child ? '' : 'offday'}>
                           <div className="day">{item.date.getDate()}</div>
@@ -1435,10 +1440,18 @@ function App() {
                                 ))}
                               </select>
                             ) : (
-                              <div className="offday-cell"></div>
+                              <div className="offday-cell">
+                                {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
+                              </div>
                             )
                           ) : (
-                            item.child ? <div>{item.child}</div> : <div className="offday-cell offday-cell-readonly"></div>
+                            item.child ? (
+                              <div>{item.child}</div>
+                            ) : (
+                              <div className="offday-cell offday-cell-readonly">
+                                {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
+                              </div>
+                            )
                           )}
                         </td>
                       )
@@ -1496,6 +1509,7 @@ function App() {
             <h2>Nyomtatási előnézet</h2>
             <p>Ez fixen azt mutatja, ami PDF/JPG exportban megjelenik.</p>
             <iframe
+              key={printPreviewFrameKey}
               title="Nyomtatási előnézet"
               className="print-preview-frame"
               sandbox="allow-scripts"
@@ -1607,11 +1621,12 @@ function buildPdfHtml(params: {
   title: string
   weekdays: string[]
   weeks: ReturnType<typeof chunkByWeek>
+  offDayDateKeys: Set<string>
   headerImage: HeaderImageState | null
   displayYear: number
   displayMonthIndex: number
 }): string {
-  const { title, weekdays, weeks, headerImage, displayYear, displayMonthIndex } = params
+  const { title, weekdays, weeks, offDayDateKeys, headerImage, displayYear, displayMonthIndex } = params
   const headColumns = weekdays
     .map(
       (day) =>
@@ -1633,8 +1648,13 @@ function buildPdfHtml(params: {
       const nameRowCells = weekdays
         .map((_, idx) => {
           const item = week.find((entry) => entry.date.getDay() === idx + 1)
-          const background = item ? '#f4e9dd' : '#dfe9f6'
-          const content = item ? escapeHtml(item.child) : ''
+          const isOffDay = Boolean(item && offDayDateKeys.has(item.dateKey))
+          const background = item ? (isOffDay ? '#eef6ea' : '#f4e9dd') : '#dfe9f6'
+          const content = item
+            ? isOffDay
+              ? '<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#6f7c72;opacity:0.85;">Nevelés nélküli munkanap</span>'
+              : escapeHtml(item.child)
+            : ''
           return `<td style="border:1px solid #4d4d4d;background:${background};font-weight:700;text-align:center;padding:1.5mm 1.2mm;font-size:4.1mm;height:12.5mm;">${content}</td>`
         })
         .join('')
