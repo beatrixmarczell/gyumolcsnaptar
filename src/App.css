@@ -239,7 +239,7 @@
 }
 
 .layout {
-  --sidebar-width: 220px;
+  --sidebar-width: 280px;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   gap: 14px;
@@ -459,6 +459,21 @@ button:active {
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.date-range-row {
+  display: grid;
+  gap: 8px;
+}
+
+.date-range-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.date-range-inputs input {
+  min-width: 0;
 }
 
 .extra-off-days-list {
@@ -741,6 +756,113 @@ table {
   color: var(--text-secondary);
 }
 
+.swap-admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.swap-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.swap-admin-actions label {
+  min-width: 220px;
+}
+
+.swap-request-list {
+  display: grid;
+  gap: 8px;
+}
+
+.swap-request-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--bg-surface-soft);
+}
+
+.swap-request-card p {
+  margin: 0;
+}
+
+.swap-offer-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.swap-offer-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swap-offer-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.swap-closed-request-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+button.swap-request-delete {
+  flex-shrink: 0;
+  min-width: 2rem;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0 6px;
+  line-height: 1;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #b00020;
+  background: rgba(176, 0, 32, 0.08);
+  border: 1px solid rgba(176, 0, 32, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button.swap-request-delete:hover:not(:disabled) {
+  background: rgba(176, 0, 32, 0.16);
+}
+
+button.swap-request-delete:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.swap-inactive-hint {
+  margin: 4px 0 0;
+  max-width: 36rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.swap-inactive-block {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(0.1);
+}
+
+/* Letiltott gombok egyértelműen “nem kattintható”-nak tűnjenek */
+.swap-admin-panel .action-button:disabled,
+.swap-inactive-block .action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 th,
 td {
   border: 1px solid var(--table-line);
@@ -787,8 +909,36 @@ th {
 td select {
   width: 100%;
   min-width: 104px;
+  min-height: 30px;
   font-size: 0.8rem;
   padding: 5px 6px;
+}
+
+.offday-cell {
+  width: 100%;
+  min-height: 30px;
+  border-radius: 8px;
+  background: #f7faf7;
+  border: 1px dashed #d7e7d7;
+}
+
+.calendar-panel td.offday {
+  background: #fcfefc;
+}
+
+.offday-cell-readonly {
+  background: #f7faf7;
+  border-color: #d7e7d7;
+}
+
+.theme-pastel .calendar-panel td.offday .offday-cell {
+  background: #fbf7ff;
+  border-color: #ebe1f8;
+}
+
+.theme-minimal .calendar-panel td.offday .offday-cell {
+  background: #f8fafc;
+  border-color: #e5e7eb;
 }
 
 .dark-mode .calendar-panel td {
@@ -798,6 +948,20 @@ td select {
 
 .dark-mode .calendar-panel td.empty {
   background: #253349;
+}
+
+.dark-mode .calendar-panel td.offday {
+  background: #1f2b40;
+}
+
+.dark-mode .offday-cell {
+  background: #25392f;
+  border-color: #3f6352;
+}
+
+.dark-mode .offday-cell.offday-cell-readonly {
+  background: #25392f;
+  border-color: #3f6352;
 }
 
 .dark-mode .calendar-panel td select {
@@ -1066,7 +1230,7 @@ input[type='file'] {
 
 @media (max-width: 1280px) {
   .layout {
-    --sidebar-width: 220px;
+    --sidebar-width: 260px;
   }
 
   .calendar-panel table {

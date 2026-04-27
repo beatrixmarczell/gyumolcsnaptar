@@ -16,6 +16,17 @@ import {
   fetchGroupState,
   saveGroupState,
 } from './lib/supabaseState'
+import {
+  approveSwapOffer,
+  clearClosedSwapRequests,
+  createSwapOffer,
+  createSwapRequest,
+  deleteSwapRequest,
+  loadSwapRequests,
+  withdrawSwapOffer,
+  withdrawSwapRequest,
+  type SwapRequest,
+} from './lib/swapWorkflow'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -73,6 +84,7 @@ const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
 const KEYCLOAK_URL = (import.meta.env.VITE_KEYCLOAK_URL as string | undefined) ?? ''
 const LOCAL_GATEWAY_BEARER_TOKEN = (import.meta.env.VITE_LOCAL_GATEWAY_BEARER_TOKEN as string | undefined)?.trim() ?? ''
+const SWAP_ADMIN_TEST_MODE = import.meta.env.VITE_SWAP_ADMIN_TEST_MODE === 'true'
 
 const rolePriority: Record<AppUserRole, number> = {
   viewer: 0,
@@ -99,6 +111,24 @@ function serializeDateKeys(keys: string[]): string {
   return [...new Set(keys)].sort().join('\n')
 }
 
+function enumerateDateKeysInclusive(fromDateKey: string, toDateKeyValue: string): string[] {
+  const from = new Date(`${fromDateKey}T00:00:00`)
+  const to = new Date(`${toDateKeyValue}T00:00:00`)
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+    return []
+  }
+  const out: string[] = []
+  const cursor = new Date(from)
+  while (cursor <= to) {
+    const day = cursor.getDay()
+    if (day >= 1 && day <= 5) {
+      out.push(toDateKey(cursor))
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return out
+}
+
 function normalizeMonthValue(value: string): string {
   const [yearText, monthText] = value.split('-')
   const year = Number(yearText)
@@ -122,6 +152,36 @@ type ManualSaveSnapshot = {
   payload: ReturnType<typeof buildAppStatePayload>
   savedAt: number
 }
+
+function mapSwapUiError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Ismeretlen hiba.'
+  if (message.toLowerCase().includes('ismeretlen action')) {
+    return 'A swap backend action még nincs ezen a környezeten.'
+  }
+  return message
+}
+
+/** DB-ből jövő státuszkód → magyar felirat a teszt panelen */
+function labelSwapRequestStatus(s: string): string {
+  const m: Record<string, string> = {
+    requested: 'nyitott kérés',
+    withdrawn: 'visszavonott kérés',
+    resolved: 'lezárt (a csere lefutott)',
+  }
+  return m[s] ?? s
+}
+
+function labelSwapOfferStatus(s: string): string {
+  const m: Record<string, string> = {
+    pending: 'ajánlat függőben',
+    accepted: 'elfogadott ajánlat',
+    rejected: 'visszavont vagy elutasított ajánlat',
+    auto_rejected: 'automatikusan elutasított (más ajánlat lett elfogadva)',
+    withdrawn: 'visszavont ajánlat',
+  }
+  return m[s] ?? s
+}
+
 
 function App() {
   const [childrenText, setChildrenText] = useState(() => {
@@ -169,6 +229,8 @@ function App() {
   const [offDayPickerValue, setOffDayPickerValue] = useState(() => {
     return `${normalizeMonthValue(monthValue)}-01`
   })
+  const [offDayRangeFrom, setOffDayRangeFrom] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
+  const [offDayRangeTo, setOffDayRangeTo] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
   const [manualOverridesByMonth, setManualOverridesByMonth] = useState<
     Record<string, Record<string, string>>
   >(() => {
@@ -276,6 +338,13 @@ function App() {
   const [isManualSaveBusy, setIsManualSaveBusy] = useState(false)
   const [isRestoreBusy, setIsRestoreBusy] = useState(false)
   const [childFilter, setChildFilter] = useState('')
+  const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([])
+  const [swapLoading, setSwapLoading] = useState(false)
+  const [swapError, setSwapError] = useState<string | null>(null)
+  const [swapRequestDateKey, setSwapRequestDateKey] = useState('')
+  const [swapOfferDateByRequest, setSwapOfferDateByRequest] = useState<Record<string, string>>({})
+  const [swapBusy, setSwapBusy] = useState(false)
+  const [showClosedSwapRequests, setShowClosedSwapRequests] = useState(false)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -415,6 +484,8 @@ function App() {
 
   useEffect(() => {
     setOffDayPickerValue(`${normalizeMonthValue(monthValue)}-01`)
+    setOffDayRangeFrom(`${normalizeMonthValue(monthValue)}-01`)
+    setOffDayRangeTo(`${normalizeMonthValue(monthValue)}-01`)
   }, [monthValue])
 
   useEffect(() => {
@@ -546,7 +617,32 @@ function App() {
       excludedChildren: [],
     })
   }, [children, workingDays, startChild, manualOverrides, excludedChildren])
-  const weeks = useMemo(() => chunkByWeek(monthResult.assignments), [monthResult.assignments])
+  const assignedChildByDateKey = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const entry of monthResult.assignments) {
+      map.set(toDateKey(entry.date), entry.child)
+    }
+    return map
+  }, [monthResult.assignments])
+  const displayedAssignments = useMemo(() => {
+    const rows: ReturnType<typeof generateAssignments>['assignments'] = []
+    const current = new Date(year, monthIndex, 1)
+    while (current.getMonth() === monthIndex) {
+      const day = current.getDay()
+      if (day >= 1 && day <= 5) {
+        const date = new Date(current)
+        const dateKey = toDateKey(date)
+        rows.push({
+          date,
+          dateKey,
+          child: assignedChildByDateKey.get(dateKey) ?? '',
+        })
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return rows
+  }, [year, monthIndex, assignedChildByDateKey])
+  const weeks = useMemo(() => chunkByWeek(displayedAssignments), [displayedAssignments])
   const exportTitle = useMemo(() => {
     return `GYÜMÖLCSNAPTÁR - ${monthNameHuLong(monthIndex).toUpperCase()}`
   }, [monthIndex])
@@ -601,6 +697,61 @@ function App() {
     const normalized = (userDisplayName ?? '').trim().toLowerCase()
     return normalized === 'admin.demo' || normalized === 'admin_demo' || normalized.includes('demo admin')
   }, [userDisplayName])
+  const swapAdminTestEnabled =
+    SWAP_ADMIN_TEST_MODE && IS_NEXT_CHANNEL && KEYCLOAK_AUTH && isAuthenticated && userRole === 'admin'
+  const visibleSwapRequests = useMemo(
+    () => (showClosedSwapRequests ? swapRequests : swapRequests.filter((request) => request.status === 'requested')),
+    [showClosedSwapRequests, swapRequests],
+  )
+  const monthDateKeys = useMemo(() => workingDays.map((d) => toDateKey(d)), [workingDays])
+  /** A naptár aktuális állapota dátum kulcsonként (kérés/ajánlat listán a tárolt név helyett ezt mutatjuk). */
+  const currentChildNameByDateKey = useMemo(() => {
+    const out = new Map<string, string>(assignedChildByDateKey)
+    const needed = new Set<string>()
+    for (const r of swapRequests) {
+      needed.add(r.requester_date_key)
+      for (const o of r.offers) {
+        needed.add(o.offer_date_key)
+      }
+    }
+    for (const dateKey of needed) {
+      if (out.has(dateKey)) {
+        continue
+      }
+      const parsed = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+      if (!parsed) {
+        continue
+      }
+      const y = Number(parsed[1])
+      const monthNum = Number(parsed[2])
+      const monthValue = `${parsed[1]}-${parsed[2]}`
+      const monthIndex0 = monthNum - 1
+      const slotOffDays = new Set(parseDateKeys(monthOffDaysByMonth[monthValue] ?? ''))
+      const slotWorkingDays = getMonthWorkingDays(y, monthIndex0, slotOffDays)
+      const slotOverrides = manualOverridesByMonth[monthValue] ?? {}
+      const slotStartChild = startChildByMonth[monthValue] ?? startChild
+      const slotResult = generateAssignments({
+        children,
+        monthWorkingDays: slotWorkingDays,
+        startChild: slotStartChild,
+        manualOverrides: slotOverrides,
+        excludedChildren: [],
+      })
+      const found = slotResult.assignments.find((a) => a.dateKey === dateKey)
+      if (found?.child) {
+        out.set(dateKey, found.child)
+      }
+    }
+    return out
+  }, [
+    assignedChildByDateKey,
+    swapRequests,
+    monthOffDaysByMonth,
+    startChildByMonth,
+    manualOverridesByMonth,
+    children,
+    startChild,
+  ])
   const childFilterMonths = useMemo(() => {
     const monthSlots = [0, 1, 2].map((offset) => {
       const slot = addMonths(year, monthIndex, offset)
@@ -869,17 +1020,49 @@ function App() {
       alert(`Kérlek az aktuális hónapból válassz dátumot: ${normalizedMonth}`)
       return
     }
-    const next = serializeDateKeys([...extraOffDayList, offDayPickerValue])
-    setExtraOffDaysText(next)
-    setMonthOffDaysByMonth((prev) => ({
-      ...prev,
-      [monthValue]: next,
-    }))
-    // Off-day changes must reflow daily assignments continuously.
-    setManualOverridesByMonth((prev) => ({
-      ...prev,
-      [monthValue]: {},
-    }))
+    applyExtraOffDays([offDayPickerValue])
+  }
+
+  const applyExtraOffDays = (dateKeys: string[]): void => {
+    const normalizedKeys = [...new Set(dateKeys.filter(Boolean))].sort()
+    if (normalizedKeys.length === 0) {
+      return
+    }
+    const touchedMonths = new Set<string>()
+    setMonthOffDaysByMonth((prev) => {
+      const next = { ...prev }
+      for (const dateKey of normalizedKeys) {
+        const monthKey = dateKey.slice(0, 7)
+        touchedMonths.add(monthKey)
+        const merged = serializeDateKeys([...parseDateKeys(next[monthKey] ?? ''), dateKey])
+        next[monthKey] = merged
+      }
+      return next
+    })
+    // Off-day changes must reflow daily assignments continuously on touched months.
+    setManualOverridesByMonth((prev) => {
+      const next = { ...prev }
+      touchedMonths.forEach((monthKey) => {
+        next[monthKey] = {}
+      })
+      return next
+    })
+  }
+
+  const addExtraOffDayRange = (): void => {
+    if (!offDayRangeFrom || !offDayRangeTo) {
+      return
+    }
+    if (offDayRangeFrom > offDayRangeTo) {
+      alert('A tól dátum nem lehet későbbi, mint az ig dátum.')
+      return
+    }
+    const keys = enumerateDateKeysInclusive(offDayRangeFrom, offDayRangeTo)
+    if (keys.length === 0) {
+      alert('Érvénytelen intervallum.')
+      return
+    }
+    applyExtraOffDays(keys)
   }
 
   const removeExtraOffDay = (dateKey: string): void => {
@@ -894,6 +1077,190 @@ function App() {
       ...prev,
       [monthValue]: {},
     }))
+  }
+
+  const refreshSwapRequests = async (): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+      setSwapRequests([])
+      return
+    }
+    setSwapLoading(true)
+    setSwapError(null)
+    try {
+      const rows = await loadSwapRequests({ accessToken: gatewayAccessToken, role: userRole })
+      setSwapRequests(rows)
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!swapAdminTestEnabled) {
+      setSwapRequests([])
+      setSwapError(null)
+      return
+    }
+    void refreshSwapRequests()
+  }, [swapAdminTestEnabled])
+
+  const handleDeleteClosedSwapRequest = async (requestId: string): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+      return
+    }
+    const ok = window.confirm('Biztosan törlöd ezt a lezárt/visszavont csere-kérést?')
+    if (!ok) {
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await deleteSwapRequest({ accessToken: gatewayAccessToken, requestId })
+      await refreshSwapRequests()
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  const handleClearClosedSwapRequests = async (): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+      return
+    }
+    const ok = window.confirm('Biztosan törlöd az összes lezárt/visszavont csere-kérést?')
+    if (!ok) {
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await clearClosedSwapRequests({ accessToken: gatewayAccessToken })
+      await refreshSwapRequests()
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  const handleCreateSwapRequest = async (): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken || !swapRequestDateKey || children.length === 0) {
+      return
+    }
+    const requesterChildName = assignedChildByDateKey.get(swapRequestDateKey)
+    if (!requesterChildName) {
+      setSwapError(`A kiválasztott dátumhoz nem található kiosztott név: ${swapRequestDateKey}`)
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await createSwapRequest({
+        accessToken: gatewayAccessToken,
+        requesterChildName,
+        requesterDateKey: swapRequestDateKey,
+      })
+      setSwapRequestDateKey('')
+      await refreshSwapRequests()
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  const handleCreateOffer = async (requestId: string): Promise<void> => {
+    const offerDateKey = swapOfferDateByRequest[requestId]
+    if (!swapAdminTestEnabled || !gatewayAccessToken || !offerDateKey || children.length === 0) {
+      return
+    }
+    const request = swapRequests.find((row) => row.id === requestId)
+    if (!request) {
+      setSwapError('A kiválasztott kérés már nem található. Frissíts listát.')
+      return
+    }
+    if (offerDateKey === request.requester_date_key) {
+      setSwapError('Ugyanarra a napra nem küldhető ajánlat.')
+      return
+    }
+    const offerChildName = assignedChildByDateKey.get(offerDateKey)
+    if (!offerChildName) {
+      setSwapError(`A kiválasztott ajánlat dátumhoz nem található kiosztott név: ${offerDateKey}`)
+      return
+    }
+    const requesterCurrentChild = currentChildNameByDateKey.get(request.requester_date_key) ?? request.requester_child_name
+    if (offerChildName === requesterCurrentChild) {
+      setSwapError('Ugyanarra a gyerekre nem küldhető csereajánlat.')
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await createSwapOffer({
+        accessToken: gatewayAccessToken,
+        requestId,
+        offerChildName,
+        offerDateKey,
+      })
+      setSwapOfferDateByRequest((prev) => ({ ...prev, [requestId]: '' }))
+      await refreshSwapRequests()
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  const handleWithdrawOffer = async (offerId: string): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await withdrawSwapOffer({ accessToken: gatewayAccessToken, offerId })
+      await refreshSwapRequests()
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  const handleApproveOffer = async (requestId: string, offerId: string): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await approveSwapOffer({ accessToken: gatewayAccessToken, requestId, offerId })
+      await refreshSwapRequests()
+      setCloudStatus('loading')
+      cloudBootstrapStarted.current = false
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
+  const handleWithdrawRequest = async (requestId: string): Promise<void> => {
+    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+      return
+    }
+    setSwapBusy(true)
+    setSwapError(null)
+    try {
+      await withdrawSwapRequest({ accessToken: gatewayAccessToken, requestId })
+      await refreshSwapRequests()
+    } catch (error) {
+      setSwapError(mapSwapUiError(error))
+    } finally {
+      setSwapBusy(false)
+    }
   }
 
   const saveManualSnapshot = async (): Promise<void> => {
@@ -1144,6 +1511,25 @@ function App() {
                 </button>
               </div>
             </label>
+            <label>
+              Szünnap intervallum (tól-ig)
+              <div className="date-range-row">
+                <div className="date-range-inputs">
+                  <input type="date" value={offDayRangeFrom} disabled={!canEdit} onChange={(e) => setOffDayRangeFrom(e.target.value)} />
+                  <input type="date" value={offDayRangeTo} disabled={!canEdit} onChange={(e) => setOffDayRangeTo(e.target.value)} />
+                </div>
+                <button
+                  type="button"
+                  className="action-button"
+                  title="Intervallum hozzáadása"
+                  aria-label="Intervallum hozzáadása"
+                  disabled={!canEdit}
+                  onClick={addExtraOffDayRange}
+                >
+                  Intervallum hozzáadása
+                </button>
+              </div>
+            </label>
             {extraOffDayList.length > 0 ? (
               <ul className="extra-off-days-list">
                 {extraOffDayList.map((dateKey) => (
@@ -1237,6 +1623,176 @@ function App() {
         ) : null}
 
         <div className="main-column">
+          {swapAdminTestEnabled ? (
+            <section className="panel swap-admin-panel">
+              <h2>Parent Swap (Admin Test Mode)</h2>
+              <p className="compact-note">
+                A törlés itt a csere-kérésekre vonatkozik: lezárt/visszavont kérés törölhető egyenként (piros ×), vagy egy
+                gombbal csoportosan. A zárójelben a kérés/ajánlat státusza látszik.
+              </p>
+              <p className="compact-note">NEXT-only teszt panel: kérés, ajánlat, visszavonás, jóváhagyás.</p>
+              <div className="swap-admin-actions">
+                <label>
+                  Kérés dátuma
+                  <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
+                    <option value="">-- Válassz dátumot --</option>
+                    {monthDateKeys.map((key) => (
+                      <option key={`request-date-${key}`} value={key}>
+                        {key}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="action-button"
+                  disabled={swapBusy || !swapRequestDateKey}
+                  onClick={() => void handleCreateSwapRequest()}
+                >
+                  Csere kérés indítása
+                </button>
+                <button
+                  type="button"
+                  className="action-button secondary"
+                  disabled={swapBusy || swapLoading}
+                  onClick={() => void refreshSwapRequests()}
+                >
+                  Frissítés
+                </button>
+                <button
+                  type="button"
+                  className="action-button secondary"
+                  disabled={swapBusy || !swapRequests.some((request) => request.status !== 'requested')}
+                  onClick={() => void handleClearClosedSwapRequests()}
+                >
+                  Lezárt / visszavont kérések törlése
+                </button>
+                <button
+                  type="button"
+                  className="action-button secondary"
+                  disabled={swapBusy}
+                  onClick={() => setShowClosedSwapRequests((prev) => !prev)}
+                >
+                  {showClosedSwapRequests ? 'Lezártak elrejtése' : 'Lezártak mutatása'}
+                </button>
+              </div>
+              {swapError ? <p className="cloud-pill cloud-pill--err">{swapError}</p> : null}
+              {swapLoading ? <p className="compact-note">Swap lista betöltése…</p> : null}
+              <div className="swap-request-list">
+                {visibleSwapRequests.map((request) => (
+                  <article key={request.id} className="swap-request-card">
+                    <p
+                      title="A név a naptár jelenlegi hozzárendelése a kérés napján (nem a szerveren eltárolt kérés-szöveg)."
+                    >
+                      <strong>Kérés:</strong>{' '}
+                      {currentChildNameByDateKey.get(request.requester_date_key) ?? request.requester_child_name} @{' '}
+                      {request.requester_date_key} ({labelSwapRequestStatus(request.status)})
+                    </p>
+                    {request.status === 'requested' ? (
+                      <div className="swap-offer-actions">
+                        <button
+                          type="button"
+                          className="action-button secondary"
+                          disabled={swapBusy}
+                          onClick={() => void handleWithdrawRequest(request.id)}
+                        >
+                          Kérés visszavonása
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="swap-closed-request-actions">
+                        <p className="swap-inactive-hint">
+                          A kérés lezárt/visszavont; külön törölhető, hogy ne szemetelje a listát.
+                        </p>
+                        <button
+                          type="button"
+                          className="swap-request-delete"
+                          title="Lezárt/visszavont kérés törlése"
+                          aria-label="Lezárt/visszavont kérés törlése"
+                          disabled={swapBusy}
+                          onClick={() => void handleDeleteClosedSwapRequest(request.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                    <div
+                      className={
+                        request.status === 'requested' ? 'swap-admin-actions' : 'swap-admin-actions swap-inactive-block'
+                      }
+                    >
+                      <label>
+                        Ajánlat dátuma
+                        <select
+                          value={swapOfferDateByRequest[request.id] ?? ''}
+                          onChange={(e) =>
+                            setSwapOfferDateByRequest((prev) => ({ ...prev, [request.id]: e.target.value }))
+                          }
+                          disabled={swapBusy || request.status !== 'requested'}
+                        >
+                          <option value="">-- Válassz dátumot --</option>
+                          {monthDateKeys.map((key) => (
+                            <option key={`offer-date-${request.id}-${key}`} value={key}>
+                              {key}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="action-button secondary"
+                        disabled={swapBusy || request.status !== 'requested' || !(swapOfferDateByRequest[request.id] ?? '')}
+                        onClick={() => void handleCreateOffer(request.id)}
+                      >
+                        Ajánlat küldése
+                      </button>
+                    </div>
+                    <ul className="swap-offer-list">
+                      {request.offers
+                        // A visszavont ajánlat ne maradjon kint értesítésként.
+                        .filter((offer) => offer.status !== 'withdrawn')
+                        .map((offer) => (
+                        <li key={offer.id}>
+                          <span
+                            title="A név a naptár jelenlegi hozzárendelése az ajánlott napon (nem a szerveren eltárolt mentett szöveg)."
+                          >
+                            {currentChildNameByDateKey.get(offer.offer_date_key) ?? offer.offer_child_name} @{' '}
+                            {offer.offer_date_key} ({labelSwapOfferStatus(offer.status)})
+                          </span>
+                          {request.status === 'requested' && offer.status === 'pending' ? (
+                            <div className="swap-offer-actions">
+                              <button
+                                type="button"
+                                className="action-button secondary"
+                                disabled={swapBusy}
+                                onClick={() => void handleApproveOffer(request.id, offer.id)}
+                              >
+                                Jóváhagyás
+                              </button>
+                              <button
+                                type="button"
+                                className="action-button secondary"
+                                disabled={swapBusy}
+                                onClick={() => void handleWithdrawOffer(offer.id)}
+                              >
+                                Ajánlat visszavonása
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="swap-inactive-hint">
+                              {offer.status === 'pending' && request.status !== 'requested'
+                                ? 'Az ajánlat a kérés lezárása miatt már nem kezelhető a listából.'
+                                : 'Az ajánlat már nincs függőben, ezért nincs műveletgomb.'}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <section className="panel calendar-panel">
             <div className="child-filter-panel">
               <div className="child-filter-header">
@@ -1332,18 +1888,22 @@ function App() {
                         return <td key={`empty-${weekIdx}-${idx}`} className="empty"></td>
                       }
                       return (
-                        <td key={item.dateKey}>
+                        <td key={item.dateKey} className={item.child ? '' : 'offday'}>
                           <div className="day">{item.date.getDate()}</div>
                           {canEdit ? (
-                            <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
-                              {children.map((name) => (
-                                <option key={`${item.dateKey}-${name}`} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
+                            item.child ? (
+                              <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
+                                {children.map((name) => (
+                                  <option key={`${item.dateKey}-${name}`} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="offday-cell"></div>
+                            )
                           ) : (
-                            <div>{item.child}</div>
+                            item.child ? <div>{item.child}</div> : <div className="offday-cell offday-cell-readonly"></div>
                           )}
                         </td>
                       )
