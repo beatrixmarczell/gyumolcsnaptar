@@ -290,7 +290,7 @@ function App() {
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(() => {
     const stored = localStorage.getItem(SETTINGS_PANEL_OPEN_STORAGE_KEY)
     if (stored === null) {
-      return true
+      return false
     }
     return stored === 'true'
   })
@@ -1493,7 +1493,7 @@ function App() {
         >
           <span className="sidebar-toggle-label">Beállítások</span>
           <span className="sidebar-toggle-icon-desktop">{settingsPanelOpen ? '◀' : '▶'}</span>
-          <span className="sidebar-toggle-icon-mobile">{settingsPanelOpen ? '▲' : '▼'}</span>
+          <span className="sidebar-toggle-icon-mobile">{settingsPanelOpen ? '▼' : '▲'}</span>
         </button>
         {canEdit ? (
         <div className="settings-panel-shell">
@@ -1504,7 +1504,7 @@ function App() {
             aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
           >
             <span>Beállítások</span>
-            <span>{settingsPanelOpen ? '▲' : '▼'}</span>
+            <span>{settingsPanelOpen ? '▼' : '▲'}</span>
           </button>
           <div className={`mobile-panel-content ${settingsPanelOpen ? '' : 'mobile-collapsed'}`}>
           <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
