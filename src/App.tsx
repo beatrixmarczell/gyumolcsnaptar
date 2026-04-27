@@ -97,6 +97,24 @@ function serializeDateKeys(keys: string[]): string {
   return [...new Set(keys)].sort().join('\n')
 }
 
+function enumerateDateKeysInclusive(fromDateKey: string, toDateKeyValue: string): string[] {
+  const from = new Date(`${fromDateKey}T00:00:00`)
+  const to = new Date(`${toDateKeyValue}T00:00:00`)
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+    return []
+  }
+  const out: string[] = []
+  const cursor = new Date(from)
+  while (cursor <= to) {
+    const day = cursor.getDay()
+    if (day >= 1 && day <= 5) {
+      out.push(toDateKey(cursor))
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return out
+}
+
 function normalizeMonthValue(value: string): string {
   const [yearText, monthText] = value.split('-')
   const year = Number(yearText)
@@ -167,6 +185,8 @@ function App() {
   const [offDayPickerValue, setOffDayPickerValue] = useState(() => {
     return `${normalizeMonthValue(monthValue)}-01`
   })
+  const [offDayRangeFrom, setOffDayRangeFrom] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
+  const [offDayRangeTo, setOffDayRangeTo] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
   const [manualOverridesByMonth, setManualOverridesByMonth] = useState<
     Record<string, Record<string, string>>
   >(() => {
@@ -413,6 +433,8 @@ function App() {
 
   useEffect(() => {
     setOffDayPickerValue(`${normalizeMonthValue(monthValue)}-01`)
+    setOffDayRangeFrom(`${normalizeMonthValue(monthValue)}-01`)
+    setOffDayRangeTo(`${normalizeMonthValue(monthValue)}-01`)
   }, [monthValue])
 
   useEffect(() => {
@@ -544,7 +566,32 @@ function App() {
       excludedChildren: [],
     })
   }, [children, workingDays, startChild, manualOverrides, excludedChildren])
-  const weeks = useMemo(() => chunkByWeek(monthResult.assignments), [monthResult.assignments])
+  const assignedChildByDateKey = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const entry of monthResult.assignments) {
+      map.set(toDateKey(entry.date), entry.child)
+    }
+    return map
+  }, [monthResult.assignments])
+  const displayedAssignments = useMemo(() => {
+    const rows: ReturnType<typeof generateAssignments>['assignments'] = []
+    const current = new Date(year, monthIndex, 1)
+    while (current.getMonth() === monthIndex) {
+      const day = current.getDay()
+      if (day >= 1 && day <= 5) {
+        const date = new Date(current)
+        const dateKey = toDateKey(date)
+        rows.push({
+          date,
+          dateKey,
+          child: assignedChildByDateKey.get(dateKey) ?? '',
+        })
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return rows
+  }, [year, monthIndex, assignedChildByDateKey])
+  const weeks = useMemo(() => chunkByWeek(displayedAssignments), [displayedAssignments])
   const exportTitle = useMemo(() => {
     return `GYÜMÖLCSNAPTÁR - ${monthNameHuLong(monthIndex).toUpperCase()}`
   }, [monthIndex])
@@ -867,17 +914,49 @@ function App() {
       alert(`Kérlek az aktuális hónapból válassz dátumot: ${normalizedMonth}`)
       return
     }
-    const next = serializeDateKeys([...extraOffDayList, offDayPickerValue])
-    setExtraOffDaysText(next)
-    setMonthOffDaysByMonth((prev) => ({
-      ...prev,
-      [monthValue]: next,
-    }))
-    // Off-day changes must reflow daily assignments continuously.
-    setManualOverridesByMonth((prev) => ({
-      ...prev,
-      [monthValue]: {},
-    }))
+    applyExtraOffDays([offDayPickerValue])
+  }
+
+  const applyExtraOffDays = (dateKeys: string[]): void => {
+    const normalizedKeys = [...new Set(dateKeys.filter(Boolean))].sort()
+    if (normalizedKeys.length === 0) {
+      return
+    }
+    const touchedMonths = new Set<string>()
+    setMonthOffDaysByMonth((prev) => {
+      const next = { ...prev }
+      for (const dateKey of normalizedKeys) {
+        const monthKey = dateKey.slice(0, 7)
+        touchedMonths.add(monthKey)
+        const merged = serializeDateKeys([...parseDateKeys(next[monthKey] ?? ''), dateKey])
+        next[monthKey] = merged
+      }
+      return next
+    })
+    // Off-day changes must reflow daily assignments continuously on touched months.
+    setManualOverridesByMonth((prev) => {
+      const next = { ...prev }
+      touchedMonths.forEach((monthKey) => {
+        next[monthKey] = {}
+      })
+      return next
+    })
+  }
+
+  const addExtraOffDayRange = (): void => {
+    if (!offDayRangeFrom || !offDayRangeTo) {
+      return
+    }
+    if (offDayRangeFrom > offDayRangeTo) {
+      alert('A tól dátum nem lehet későbbi, mint az ig dátum.')
+      return
+    }
+    const keys = enumerateDateKeysInclusive(offDayRangeFrom, offDayRangeTo)
+    if (keys.length === 0) {
+      alert('Érvénytelen intervallum.')
+      return
+    }
+    applyExtraOffDays(keys)
   }
 
   const removeExtraOffDay = (dateKey: string): void => {
@@ -1137,6 +1216,25 @@ function App() {
                 </button>
               </div>
             </label>
+            <label>
+              Szünnap intervallum (tól-ig)
+              <div className="date-range-row">
+                <div className="date-range-inputs">
+                  <input type="date" value={offDayRangeFrom} disabled={!canEdit} onChange={(e) => setOffDayRangeFrom(e.target.value)} />
+                  <input type="date" value={offDayRangeTo} disabled={!canEdit} onChange={(e) => setOffDayRangeTo(e.target.value)} />
+                </div>
+                <button
+                  type="button"
+                  className="action-button"
+                  title="Intervallum hozzáadása"
+                  aria-label="Intervallum hozzáadása"
+                  disabled={!canEdit}
+                  onClick={addExtraOffDayRange}
+                >
+                  Intervallum hozzáadása
+                </button>
+              </div>
+            </label>
             {extraOffDayList.length > 0 ? (
               <ul className="extra-off-days-list">
                 {extraOffDayList.map((dateKey) => (
@@ -1325,18 +1423,22 @@ function App() {
                         return <td key={`empty-${weekIdx}-${idx}`} className="empty"></td>
                       }
                       return (
-                        <td key={item.dateKey}>
+                        <td key={item.dateKey} className={item.child ? '' : 'offday'}>
                           <div className="day">{item.date.getDate()}</div>
                           {canEdit ? (
-                            <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
-                              {children.map((name) => (
-                                <option key={`${item.dateKey}-${name}`} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
+                            item.child ? (
+                              <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
+                                {children.map((name) => (
+                                  <option key={`${item.dateKey}-${name}`} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="offday-cell"></div>
+                            )
                           ) : (
-                            <div>{item.child}</div>
+                            item.child ? <div>{item.child}</div> : <div className="offday-cell offday-cell-readonly"></div>
                           )}
                         </td>
                       )
