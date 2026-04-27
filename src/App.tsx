@@ -70,11 +70,12 @@ const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
 const APP_CHANNEL = __APP_CHANNEL__
 const APP_VERSION_DISPLAY = (() => {
-  const match = APP_VERSION.match(/v?\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?/i)
+  const match = APP_VERSION.match(/v?\d+\.\d+\.\d+/i)
   if (!match) {
     return APP_VERSION
   }
-  return `v${match[0].replace(/^v/i, '')}`
+  const core = match[0].replace(/^v/i, '')
+  return `v${core}`
 })()
 const IS_NEXT_CHANNEL = APP_CHANNEL === 'next'
 
@@ -1971,7 +1972,6 @@ function App() {
 
           <section className="panel preview-panel">
             <h2>Nyomtatási előnézet</h2>
-            <p>Ez fixen azt mutatja, ami PDF/JPG exportban megjelenik.</p>
             <iframe
               key={printPreviewFrameKey}
               title="Nyomtatási előnézet"
