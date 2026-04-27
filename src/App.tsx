@@ -1461,7 +1461,7 @@ function App() {
             </table>
             <div className="calendar-actions">
               <button type="button" className="action-button" onClick={downloadPdf}>
-                <span>🧾</span> Nyomtatás / PDF letöltés
+                <span>🧾</span> PDF letöltés
               </button>
               <button type="button" className="action-button" onClick={downloadJpg}>
                 <span>🖼️</span> JPG letöltés
@@ -1844,3 +1844,4 @@ function buildResponsivePreviewHtml(contentHtml: string): string {
 }
 
 export default App
+
