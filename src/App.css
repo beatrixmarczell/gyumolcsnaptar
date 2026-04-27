@@ -783,17 +783,18 @@ table {
   width: fit-content;
   max-width: 100%;
   padding: 10px;
-  border: 1px solid #b8c9ff;
+  border: 2px solid #f59e0b;
+  border-left-width: 6px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #eff4ff 0%, #e6f0ff 100%);
-  box-shadow: 0 10px 22px rgba(59, 130, 246, 0.18);
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  box-shadow: 0 10px 22px rgba(245, 158, 11, 0.24);
 }
 
 .swap-request-create-card .swap-admin-actions {
   display: grid;
   grid-template-columns: minmax(210px, auto) auto;
   align-items: end;
-  background: #ffffffbf;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .swap-request-create-title {
@@ -801,7 +802,7 @@ table {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: #1e3a8a;
+  color: #92400e;
 }
 
 .swap-admin-actions .action-button {
@@ -1132,21 +1133,21 @@ td select {
 }
 
 .dark-mode .calendar-panel td.offday {
-  background: #1f2b40;
+  background: #223149;
 }
 
 .dark-mode .offday-cell {
-  background: #25392f;
-  border-color: #3f6352;
+  background: #2a374a;
+  border-color: #415977;
 }
 
 .dark-mode .offday-cell.offday-cell-readonly {
-  background: #25392f;
-  border-color: #3f6352;
+  background: #2a374a;
+  border-color: #415977;
 }
 
 .dark-mode .offday-label {
-  color: #a9bbaf;
+  color: #bfd0e5;
   opacity: 0.8;
 }
 
@@ -1197,17 +1198,17 @@ td select {
 }
 
 .dark-mode .swap-request-create-card {
-  border-color: #3b5ba0;
-  background: linear-gradient(135deg, #1c2b44 0%, #21344f 100%);
-  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.5);
+  border-color: #b7791f;
+  background: linear-gradient(135deg, #2f2617 0%, #3a301d 100%);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38);
 }
 
 .dark-mode .swap-request-create-card .swap-admin-actions {
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.56);
 }
 
 .dark-mode .swap-request-create-title {
-  color: #bfdbfe;
+  color: #f6c76b;
 }
 
 .dark-mode .offday-toggle-button {
