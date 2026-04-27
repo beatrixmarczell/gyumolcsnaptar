@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -49,12 +49,6 @@ function resolveAppVersion(): string {
     return normalizedEnvVersion
   }
 
-  const vercelTag = (process.env.VERCEL_GIT_COMMIT_TAG ?? '').trim()
-  const normalizedVercelTag = extractSemverTag(vercelTag)
-  if (normalizedVercelTag) {
-    return normalizedVercelTag
-  }
-
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
   }
@@ -79,7 +73,7 @@ export default defineConfig(({ mode }) => {
   const appVersion = resolveAppVersion()
   const appChannel = resolveReleaseChannel(appVersion)
   return {
-    // Electron file:// betöltéshez relatív asset útvonal kell.
+    // Electron file:// betolteshez relativ asset utvonal kell.
     base: isDesktop ? './' : process.env.GITHUB_ACTIONS ? '/gyumolcsnaptar/' : '/',
     plugins: [react()],
     define: {
@@ -88,3 +82,4 @@ export default defineConfig(({ mode }) => {
     },
   }
 })
+
