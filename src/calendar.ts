@@ -8,7 +8,7 @@ export type Assignment = {
 
 const huHolidays = new Holidays('HU')
 
-function isPublicHoliday(date: Date): boolean {
+export function isPublicHolidayDate(date: Date): boolean {
   const holidayData = huHolidays.isHoliday(date)
   if (!holidayData) {
     return false
@@ -35,7 +35,7 @@ export function getMonthWorkingDays(
   while (current.getMonth() === monthIndex) {
     const isWeekday = current.getDay() >= 1 && current.getDay() <= 5
     const dateKey = toDateKey(current)
-    const isHoliday = isPublicHoliday(current)
+    const isHoliday = isPublicHolidayDate(current)
     const isExtraOff = extraOffDays.has(dateKey)
 
     if (isWeekday && !isHoliday && !isExtraOff) {
