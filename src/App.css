@@ -1127,6 +1127,11 @@ td select {
   border-color: #d7e7d7;
 }
 
+.holiday-gap-cell {
+  background: #f4f8ff;
+  border-color: #d9e4f7;
+}
+
 .offday-label {
   font-size: 0.66rem;
   line-height: 1.2;
@@ -1159,18 +1164,33 @@ td select {
 }
 
 .dark-mode .offday-cell {
-  background: #2a374a;
-  border-color: #415977;
+  background: #243246;
+  border-color: #3a506e;
+}
+
+.dark-mode .calendar-panel td.offday .offday-cell {
+  background: #243246;
+  border-color: #3a506e;
 }
 
 .dark-mode .offday-cell.offday-cell-readonly {
-  background: #2a374a;
-  border-color: #415977;
+  background: #243246;
+  border-color: #3a506e;
+}
+
+.dark-mode .holiday-gap-cell {
+  background: #2b3b52;
+  border-color: #49668c;
+}
+
+.dark-mode .calendar-panel td.offday .holiday-gap-cell {
+  background: #2b3b52;
+  border-color: #49668c;
 }
 
 .dark-mode .offday-label {
-  color: #bfd0e5;
-  opacity: 0.8;
+  color: #d6e4f7;
+  opacity: 0.88;
 }
 
 .dark-mode .swap-request-list .swap-request-card:nth-child(6n + 1) {

@@ -4,6 +4,7 @@ import {
   addOneMonth,
   generateAssignments,
   getMonthWorkingDays,
+  isPublicHolidayDate,
   monthLabel,
   toDateKey,
 } from './calendar'
@@ -1848,6 +1849,7 @@ function App() {
                         return <td key={`empty-${weekIdx}-${idx}`} className="empty"></td>
                       }
                       const isOffDay = extraOffDays.has(item.dateKey)
+                      const isImportedHolidayGap = !item.child && isPublicHolidayDate(item.date) && !isOffDay
                       return (
                         <td
                           key={item.dateKey}
@@ -1896,16 +1898,18 @@ function App() {
                                 ))}
                               </select>
                             ) : (
-                              <div className="offday-cell">
+                              <div className={`offday-cell ${isImportedHolidayGap ? 'holiday-gap-cell' : ''}`}>
                                 {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
+                                {isImportedHolidayGap ? <span className="offday-label">Munkaszüneti nap</span> : null}
                               </div>
                             )
                           ) : (
                             item.child ? (
                               <div>{item.child}</div>
                             ) : (
-                              <div className="offday-cell offday-cell-readonly">
+                              <div className={`offday-cell offday-cell-readonly ${isImportedHolidayGap ? 'holiday-gap-cell' : ''}`}>
                                 {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
+                                {isImportedHolidayGap ? <span className="offday-label">Munkaszüneti nap</span> : null}
                               </div>
                             )
                           )}
@@ -2096,18 +2100,31 @@ function buildPdfHtml(params: {
         .map((_, idx) => {
           const dayDate = new Date(monday)
           dayDate.setDate(monday.getDate() + idx)
-          return `<td style="border:1px solid #4d4d4d;background:#fffbe8;font-weight:700;text-align:center;padding:1.2mm 1mm;font-size:4.1mm;height:7.2mm;">${dayDate.getDate()}</td>`
+          const isInShownMonth = dayDate.getFullYear() === displayYear && dayDate.getMonth() === displayMonthIndex
+          const dayBackground = isInShownMonth ? '#fffbe8' : '#f3f4f6'
+          return `<td style="border:1px solid #4d4d4d;background:${dayBackground};font-weight:700;text-align:center;padding:1.2mm 1mm;font-size:4.1mm;height:7.2mm;">${dayDate.getDate()}</td>`
         })
         .join('')
 
       const nameRowCells = weekdays
         .map((_, idx) => {
+          const dayDate = new Date(monday)
+          dayDate.setDate(monday.getDate() + idx)
           const item = week.find((entry) => entry.date.getDay() === idx + 1)
           const isOffDay = Boolean(item && offDayDateKeys.has(item.dateKey))
-          const background = item ? (isOffDay ? '#eef6ea' : '#f4e9dd') : '#dfe9f6'
+          const isImportedHolidayGap =
+            Boolean(item) &&
+            !item!.child &&
+            item!.date.getFullYear() === displayYear &&
+            item!.date.getMonth() === displayMonthIndex &&
+            isPublicHolidayDate(item!.date) &&
+            !isOffDay
+          const background = item ? (isOffDay ? '#eef6ea' : isImportedHolidayGap ? '#e8eef9' : '#f4e9dd') : '#f3f4f6'
           const content = item
             ? isOffDay
               ? '<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#6f7c72;opacity:0.85;">Nevelés nélküli munkanap</span>'
+              : isImportedHolidayGap
+                ? '<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#5d6f89;opacity:0.88;">Munkaszüneti nap</span>'
               : escapeHtml(item.child)
             : ''
           return `<td style="border:1px solid #4d4d4d;background:${background};font-weight:700;text-align:center;padding:1.5mm 1.2mm;font-size:4.1mm;height:12.5mm;">${content}</td>`
