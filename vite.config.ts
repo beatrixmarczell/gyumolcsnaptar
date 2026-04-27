@@ -58,29 +58,18 @@ function resolveAppVersion(): string {
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
   }
-  const packageVersion = extractSemverTag(packageJson.version ?? '') || 'v0.0.0'
+  const packageVersion = extractSemverTag(packageJson.version ?? '')
+  if (packageVersion) {
+    return packageVersion
+  }
 
   try {
-    const tag = execSync('git describe --tags --match v[0-9]* --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim()
-    const normalizedTag = extractSemverTag(tag)
-    return normalizedTag || packageVersion
+    const commitSha =
+      (process.env.VERCEL_GIT_COMMIT_SHA ?? '').trim().slice(0, 7) ||
+      execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    return commitSha ? `git-${commitSha}` : 'v0.0.0'
   } catch {
-    try {
-      const commitSha =
-        (process.env.VERCEL_GIT_COMMIT_SHA ?? '').trim().slice(0, 7) ||
-        execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-      if (!commitSha) {
-        return packageVersion
-      }
-      if (packageVersion === 'v0.0.0') {
-        return `git-${commitSha}`
-      }
-      return `${packageVersion}+${commitSha}`
-    } catch {
-      return packageVersion
-    }
+    return 'v0.0.0'
   }
 }
 
