@@ -4,9 +4,26 @@ import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5.9.6'
 type AppRole = 'admin' | 'editor' | 'viewer'
 
 type RequestBody = {
-  action?: 'load' | 'save'
+  action?:
+    | 'load'
+    | 'save'
+    | 'swap_list'
+    | 'swap_request_create'
+    | 'swap_offer_create'
+    | 'swap_offer_withdraw'
+    | 'swap_request_withdraw'
+    | 'swap_request_approve'
+    | 'swap_request_delete'
+    | 'swap_requests_clear_closed'
   groupId?: string
   payload?: unknown
+  requestId?: string
+  offerId?: string
+  requesterChildName?: string
+  requesterDateKey?: string
+  offerChildName?: string
+  offerDateKey?: string
+  note?: string
 }
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -228,6 +245,89 @@ async function resolveMembership(
   }
 }
 
+type SwapRequestRow = {
+  id: string
+  group_id: string
+  requester_user_id: string
+  requester_child_name: string
+  requester_date_key: string
+  note: string | null
+  status: string
+  resolved_offer_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+type SwapOfferRow = {
+  id: string
+  request_id: string
+  offer_user_id: string
+  offer_child_name: string
+  offer_date_key: string
+  note: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+function isDateKey(value: string): boolean {
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)
+}
+
+async function ensureChildLinked(groupId: string, userId: string, childName: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('parent_child_links')
+    .select('child_name')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .eq('child_name', childName)
+    .maybeSingle()
+  if (error) {
+    throw new Error(error.message)
+  }
+  if (!data) {
+    throw new Error(`Nincs parent-child mapping ehhez a gyerekhez: ${childName}`)
+  }
+}
+
+async function loadSwapBoard(groupId: string): Promise<{ requests: Array<SwapRequestRow & { offers: SwapOfferRow[] }> }> {
+  const { data: requests, error: requestsError } = await supabase
+    .from('swap_requests')
+    .select('*')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+  if (requestsError) {
+    throw new Error(requestsError.message)
+  }
+  const requestRows = (requests ?? []) as SwapRequestRow[]
+  const requestIds = requestRows.map((r) => r.id)
+  const offersByRequest = new Map<string, SwapOfferRow[]>()
+  if (requestIds.length > 0) {
+    const { data: offers, error: offersError } = await supabase
+      .from('swap_offers')
+      .select('*')
+      .in('request_id', requestIds)
+      .order('created_at', { ascending: true })
+    if (offersError) {
+      throw new Error(offersError.message)
+    }
+    for (const offer of (offers ?? []) as SwapOfferRow[]) {
+      const list = offersByRequest.get(offer.request_id)
+      if (list) {
+        list.push(offer)
+      } else {
+        offersByRequest.set(offer.request_id, [offer])
+      }
+    }
+  }
+  return {
+    requests: requestRows.map((request) => ({
+      ...request,
+      offers: offersByRequest.get(request.id) ?? [],
+    })),
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders })
@@ -253,16 +353,14 @@ Deno.serve(async (req) => {
     const desktopMode = Boolean(DESKTOP_ACCESS_TOKEN) && token === DESKTOP_ACCESS_TOKEN
     const identity = desktopMode
       ? {
-          sub: 'desktop-local',
-          email: null,
-          displayName: 'Desktop User',
-          preferredUsername: 'desktop.local',
+          sub: 'demo-admin-sub',
+          email: 'admin@example.com',
+          displayName: 'admin.demo',
+          preferredUsername: 'admin.demo',
           tokenRoles: ['admin'] as AppRole[],
         }
       : await verifyKeycloakJwt(token)
-    const access = desktopMode
-      ? { role: 'admin' as AppRole, userId: 'desktop-local' }
-      : await resolveMembership(groupId, identity)
+    const access = await resolveMembership(groupId, identity)
 
     if (action === 'load') {
       const { data, error } = await supabase
@@ -302,6 +400,323 @@ Deno.serve(async (req) => {
         return json(500, { error: `Mentés sikertelen: ${error.message}` })
       }
       return json(200, { ok: true, role: access.role })
+    }
+
+    if (action === 'swap_list') {
+      const board = await loadSwapBoard(groupId)
+      return json(200, { ...board, role: access.role, userProfileId: access.userId })
+    }
+
+    if (action === 'swap_request_create') {
+      if (access.role === 'viewer') {
+        return json(403, { error: 'Viewer szerepkörrel csere kérés nem indítható.' })
+      }
+      const requesterChildName = body.requesterChildName?.trim() ?? ''
+      const requesterDateKey = body.requesterDateKey?.trim() ?? ''
+      if (!requesterChildName || !isDateKey(requesterDateKey)) {
+        return json(400, { error: 'Hiányzó vagy hibás requesterChildName / requesterDateKey.' })
+      }
+      if (access.role !== 'admin') {
+        await ensureChildLinked(groupId, access.userId, requesterChildName)
+      }
+      const { data, error } = await supabase
+        .from('swap_requests')
+        .insert({
+          group_id: groupId,
+          requester_user_id: access.userId,
+          requester_child_name: requesterChildName,
+          requester_date_key: requesterDateKey,
+          note: body.note?.trim() || null,
+          status: 'requested',
+        })
+        .select('*')
+        .single()
+      if (error) {
+        return json(500, { error: `Csere kérés mentése sikertelen: ${error.message}` })
+      }
+      await supabase.from('swap_events').insert({
+        group_id: groupId,
+        request_id: data.id,
+        actor_user_id: access.userId,
+        event_type: 'swap_request_created',
+        payload: { requesterChildName, requesterDateKey },
+      })
+      return json(200, { ok: true, request: data })
+    }
+
+    if (action === 'swap_offer_create') {
+      if (access.role === 'viewer') {
+        return json(403, { error: 'Viewer szerepkörrel csere ajánlat nem adható.' })
+      }
+      const requestId = body.requestId?.trim() ?? ''
+      const offerChildName = body.offerChildName?.trim() ?? ''
+      const offerDateKey = body.offerDateKey?.trim() ?? ''
+      if (!requestId || !offerChildName || !isDateKey(offerDateKey)) {
+        return json(400, { error: 'Hiányzó vagy hibás requestId / offerChildName / offerDateKey.' })
+      }
+      if (access.role !== 'admin') {
+        await ensureChildLinked(groupId, access.userId, offerChildName)
+      }
+      const { data: requestRow, error: requestError } = await supabase
+        .from('swap_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('group_id', groupId)
+        .single()
+      if (requestError || !requestRow) {
+        return json(404, { error: 'Swap request nem található.' })
+      }
+      if ((requestRow as SwapRequestRow).status !== 'requested') {
+        return json(409, { error: 'A swap request már nem aktív.' })
+      }
+      if ((requestRow as SwapRequestRow).requester_date_key === offerDateKey) {
+        return json(409, { error: 'Ugyanarra a dátumra nem adhatsz csereajánlatot.' })
+      }
+      if ((requestRow as SwapRequestRow).requester_child_name.trim() === offerChildName.trim()) {
+        return json(409, { error: 'Ugyanarra a gyerekre nem adhatsz csereajánlatot.' })
+      }
+      if ((requestRow as SwapRequestRow).requester_user_id === access.userId && access.role !== 'admin') {
+        return json(400, { error: 'Saját kérésre nem adhatsz ajánlatot.' })
+      }
+      const { data: existingOffer, error: existingOfferError } = await supabase
+        .from('swap_offers')
+        .select('*')
+        .eq('request_id', requestId)
+        .eq('offer_user_id', access.userId)
+        .eq('offer_date_key', offerDateKey)
+        .maybeSingle()
+      if (existingOfferError) {
+        return json(500, { error: `Korábbi ajánlat lekérése sikertelen: ${existingOfferError.message}` })
+      }
+      if (existingOffer) {
+        const existingStatus = (existingOffer as SwapOfferRow).status
+        if (existingStatus === 'pending') {
+          return json(409, { error: 'Ehhez a kéréshez erre a dátumra már adtál ajánlatot.' })
+        }
+        if (existingStatus === 'accepted') {
+          return json(409, { error: 'Ez az ajánlat már elfogadott, nem nyitható újra.' })
+        }
+        const { data: reopenedOffer, error: reopenError } = await supabase
+          .from('swap_offers')
+          .update({
+            offer_child_name: offerChildName,
+            note: body.note?.trim() || null,
+            status: 'pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', (existingOffer as SwapOfferRow).id)
+          .select('*')
+          .single()
+        if (reopenError || !reopenedOffer) {
+          return json(500, { error: `Visszavont ajánlat újranyitása sikertelen: ${reopenError?.message ?? 'ismeretlen hiba'}` })
+        }
+        await supabase.from('swap_events').insert({
+          group_id: groupId,
+          request_id: requestId,
+          offer_id: reopenedOffer.id,
+          actor_user_id: access.userId,
+          event_type: 'swap_offer_created',
+          payload: { offerChildName, offerDateKey, reopened: true },
+        })
+        return json(200, { ok: true, offer: reopenedOffer })
+      }
+      const { data, error } = await supabase
+        .from('swap_offers')
+        .insert({
+          request_id: requestId,
+          offer_user_id: access.userId,
+          offer_child_name: offerChildName,
+          offer_date_key: offerDateKey,
+          note: body.note?.trim() || null,
+          status: 'pending',
+          updated_at: new Date().toISOString(),
+        })
+        .select('*')
+        .single()
+      if (error) {
+        if (error.code === '23505') {
+          return json(409, { error: 'Ehhez a kéréshez erre a dátumra már van aktív ajánlatod.' })
+        }
+        return json(500, { error: `Csere ajánlat mentése sikertelen: ${error.message}` })
+      }
+      await supabase.from('swap_events').insert({
+        group_id: groupId,
+        request_id: requestId,
+        offer_id: data.id,
+        actor_user_id: access.userId,
+        event_type: 'swap_offer_created',
+        payload: { offerChildName, offerDateKey },
+      })
+      return json(200, { ok: true, offer: data })
+    }
+
+    if (action === 'swap_offer_withdraw') {
+      const offerId = body.offerId?.trim() ?? ''
+      if (!offerId) {
+        return json(400, { error: 'Hiányzó offerId.' })
+      }
+      const { data: offer, error: offerReadError } = await supabase
+        .from('swap_offers')
+        .select('id,request_id,offer_user_id,status')
+        .eq('id', offerId)
+        .single()
+      if (offerReadError || !offer) {
+        return json(404, { error: 'Swap offer nem található.' })
+      }
+      if (offer.offer_user_id !== access.userId && access.role !== 'admin') {
+        return json(403, { error: 'Csak a létrehozó vagy admin vonhatja vissza.' })
+      }
+      if (offer.status !== 'pending') {
+        return json(409, { error: 'Csak pending ajánlat vonható vissza.' })
+      }
+      const { error } = await supabase
+        .from('swap_offers')
+        .update({ status: 'withdrawn', updated_at: new Date().toISOString() })
+        .eq('id', offerId)
+      if (error) {
+        return json(500, { error: `Ajánlat visszavonás sikertelen: ${error.message}` })
+      }
+      await supabase.from('swap_events').insert({
+        group_id: groupId,
+        request_id: offer.request_id,
+        offer_id: offerId,
+        actor_user_id: access.userId,
+        event_type: 'swap_offer_withdrawn',
+        payload: {},
+      })
+      return json(200, { ok: true })
+    }
+
+    if (action === 'swap_request_withdraw') {
+      const requestId = body.requestId?.trim() ?? ''
+      if (!requestId) {
+        return json(400, { error: 'Hiányzó requestId.' })
+      }
+      const { data: requestRow, error: requestError } = await supabase
+        .from('swap_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('group_id', groupId)
+        .single()
+      if (requestError || !requestRow) {
+        return json(404, { error: 'Swap request nem található.' })
+      }
+      if ((requestRow as SwapRequestRow).requester_user_id !== access.userId && access.role !== 'admin') {
+        return json(403, { error: 'Csak a kérvényező vagy admin vonhatja vissza a kérést.' })
+      }
+      if ((requestRow as SwapRequestRow).status !== 'requested') {
+        return json(409, { error: 'Csak requested státuszú kérés vonható vissza.' })
+      }
+      const { error: withdrawError } = await supabase.rpc('withdraw_swap_request', {
+        p_group_id: groupId,
+        p_request_id: requestId,
+      })
+      if (withdrawError) {
+        return json(500, { error: `Kérés visszavonás sikertelen: ${withdrawError.message}` })
+      }
+      await supabase.from('swap_events').insert({
+        group_id: groupId,
+        request_id: requestId,
+        actor_user_id: access.userId,
+        event_type: 'swap_request_withdrawn',
+        payload: {},
+      })
+      return json(200, { ok: true })
+    }
+
+    if (action === 'swap_request_approve') {
+      const requestId = body.requestId?.trim() ?? ''
+      const offerId = body.offerId?.trim() ?? ''
+      if (!requestId || !offerId) {
+        return json(400, { error: 'Hiányzó requestId/offerId.' })
+      }
+      const { data: requestRow, error: requestError } = await supabase
+        .from('swap_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('group_id', groupId)
+        .single()
+      if (requestError || !requestRow) {
+        return json(404, { error: 'Swap request nem található.' })
+      }
+      if ((requestRow as SwapRequestRow).requester_user_id !== access.userId && access.role !== 'admin') {
+        return json(403, { error: 'Csak a kérvényező vagy admin hagyhat jóvá.' })
+      }
+      const { data: swappedPayload, error: swapError } = await supabase.rpc('apply_swap_offer', {
+        p_group_id: groupId,
+        p_request_id: requestId,
+        p_offer_id: offerId,
+      })
+      if (swapError) {
+        return json(500, { error: `Csere tranzakció hiba: ${swapError.message}` })
+      }
+      await supabase.from('swap_events').insert([
+        {
+          group_id: groupId,
+          request_id: requestId,
+          offer_id: offerId,
+          actor_user_id: access.userId,
+          event_type: 'swap_offer_accepted',
+          payload: {},
+        },
+        {
+          group_id: groupId,
+          request_id: requestId,
+          offer_id: offerId,
+          actor_user_id: access.userId,
+          event_type: 'swap_request_resolved',
+          payload: {},
+        },
+      ])
+      return json(200, { ok: true, payload: swappedPayload })
+    }
+
+    if (action === 'swap_request_delete') {
+      if (access.role === 'viewer') {
+        return json(403, { error: 'Viewer szerepkörrel kérés törlés nem engedélyezett.' })
+      }
+      const requestId = body.requestId?.trim() ?? ''
+      if (!requestId) {
+        return json(400, { error: 'Hiányzó requestId.' })
+      }
+      const { data: requestRow, error: requestError } = await supabase
+        .from('swap_requests')
+        .select('id,status,requester_user_id')
+        .eq('id', requestId)
+        .eq('group_id', groupId)
+        .maybeSingle()
+      if (requestError) {
+        return json(500, { error: `Kérés lekérése sikertelen: ${requestError.message}` })
+      }
+      if (!requestRow) {
+        return json(404, { error: 'Swap request nem található.' })
+      }
+      if (requestRow.status === 'requested') {
+        return json(409, { error: 'Nyitott kérés nem törölhető. Előbb zárd le vagy vond vissza.' })
+      }
+      if (access.role !== 'admin' && requestRow.requester_user_id !== access.userId) {
+        return json(403, { error: 'Csak a kérés létrehozója vagy admin törölheti.' })
+      }
+      const { error } = await supabase.from('swap_requests').delete().eq('id', requestId).eq('group_id', groupId)
+      if (error) {
+        return json(500, { error: `Kérés törlése: ${error.message}` })
+      }
+      return json(200, { ok: true })
+    }
+
+    if (action === 'swap_requests_clear_closed') {
+      if (access.role === 'viewer') {
+        return json(403, { error: 'Viewer szerepkörrel törlés nem engedélyezett.' })
+      }
+      const { error } = await supabase
+        .from('swap_requests')
+        .delete()
+        .eq('group_id', groupId)
+        .in('status', ['resolved', 'withdrawn'])
+      if (error) {
+        return json(500, { error: `Lezárt/visszavont kérések törlése: ${error.message}` })
+      }
+      return json(200, { ok: true })
     }
 
     return json(400, { error: 'Ismeretlen action.' })

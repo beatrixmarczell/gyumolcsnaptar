@@ -1,0 +1,2 @@
+-- Placeholder migration file to align local history with remote.
+-- Remote version 20260425190000 is already applied.
