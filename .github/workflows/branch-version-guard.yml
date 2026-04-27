@@ -42,10 +42,6 @@ jobs:
             console.error('master requires stable version (no prerelease): ' + version);
             process.exit(1);
           }
-          if (ref === 'refs/heads/next/v3' && !isPrerelease) {
-            console.error('next/v3 requires prerelease version: ' + version);
-            process.exit(1);
-          }
           console.log('Version policy passed on ' + ref + ': ' + version);
           "
 
