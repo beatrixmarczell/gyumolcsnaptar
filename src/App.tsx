@@ -1568,26 +1568,29 @@ function App() {
           {swapAdminTestEnabled ? (
             <section className="panel swap-admin-panel">
               <h2>Parent Swap (Admin Test Mode)</h2>
-              <div className="swap-admin-actions">
-                <label>
-                  Kérés dátuma
-                  <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
-                    <option value="">-- Válassz dátumot --</option>
-                    {monthDateKeys.map((key) => (
-                      <option key={`request-date-${key}`} value={key}>
-                        {key}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="action-button swap-primary-action"
-                  disabled={swapBusy || !swapRequestDateKey}
-                  onClick={() => void handleCreateSwapRequest()}
-                >
-                  Csere kérés indítása
-                </button>
+              <div className="swap-request-create-card">
+                <p className="swap-request-create-title">Csere igénylés:</p>
+                <div className="swap-admin-actions">
+                  <label>
+                    Kérés dátuma
+                    <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
+                      <option value="">-- Válassz dátumot --</option>
+                      {monthDateKeys.map((key) => (
+                        <option key={`request-date-${key}`} value={key}>
+                          {key}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="action-button swap-primary-action"
+                    disabled={swapBusy || !swapRequestDateKey}
+                    onClick={() => void handleCreateSwapRequest()}
+                  >
+                    Csere kérés indítása
+                  </button>
+                </div>
               </div>
               {swapError ? <p className="cloud-pill cloud-pill--err">{swapError}</p> : null}
               {swapLoading ? <p className="compact-note">Swap lista betöltése…</p> : null}

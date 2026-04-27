@@ -778,6 +778,32 @@ table {
   margin: 0;
 }
 
+.swap-request-create-card {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid #b8c9ff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eff4ff 0%, #e6f0ff 100%);
+  box-shadow: 0 10px 22px rgba(59, 130, 246, 0.18);
+}
+
+.swap-request-create-card .swap-admin-actions {
+  display: grid;
+  grid-template-columns: minmax(210px, auto) auto;
+  align-items: end;
+  background: #ffffffbf;
+}
+
+.swap-request-create-title {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #1e3a8a;
+}
+
 .swap-admin-actions .action-button {
   width: auto;
   min-width: 170px;
@@ -790,12 +816,16 @@ table {
 }
 
 .swap-request-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 10px;
 }
 
 .swap-request-card {
+  flex: 0 1 360px;
+  width: min(360px, 100%);
+  min-height: 232px;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px;
@@ -803,6 +833,37 @@ table {
   display: grid;
   gap: 8px;
   align-content: start;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+}
+
+.swap-request-card > p {
+  min-height: 2.4em;
+}
+
+.swap-request-card > .swap-offer-actions,
+.swap-request-card > .swap-closed-request-actions {
+  min-height: 34px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.swap-request-card > .swap-admin-actions {
+  min-height: 108px;
+  align-content: start;
+}
+
+.swap-request-card > .swap-offer-list {
+  min-height: 94px;
+  align-content: start;
+}
+
+.swap-request-card .swap-offer-list li {
+  min-height: 58px;
+  align-items: center;
+}
+
+.swap-request-card:hover {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
 }
 
 .swap-request-list .swap-request-card:nth-child(6n + 1) {
@@ -1127,8 +1188,26 @@ td select {
   color: #e5e7eb;
 }
 
+.dark-mode .swap-request-card {
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.45);
+}
+
 .dark-mode .swap-request-card .swap-inactive-hint {
   color: #cbd5e1;
+}
+
+.dark-mode .swap-request-create-card {
+  border-color: #3b5ba0;
+  background: linear-gradient(135deg, #1c2b44 0%, #21344f 100%);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.5);
+}
+
+.dark-mode .swap-request-create-card .swap-admin-actions {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.dark-mode .swap-request-create-title {
+  color: #bfdbfe;
 }
 
 .dark-mode .offday-toggle-button {
@@ -1598,6 +1677,35 @@ input[type='file'] {
 
   .calendar-actions {
     justify-content: center;
+  }
+
+  .swap-request-create-card {
+    width: 100%;
+    padding: 8px;
+  }
+
+  .swap-request-create-card .swap-admin-actions {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .swap-request-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .swap-request-card {
+    width: 100%;
+    min-height: 0;
+  }
+
+  .swap-request-card > p,
+  .swap-request-card > .swap-offer-actions,
+  .swap-request-card > .swap-closed-request-actions,
+  .swap-request-card > .swap-admin-actions,
+  .swap-request-card > .swap-offer-list,
+  .swap-request-card .swap-offer-list li {
+    min-height: 0;
   }
 }
 
