@@ -792,6 +792,10 @@ td select {
   padding: 5px 6px;
 }
 
+.mobile-selected-name {
+  display: none;
+}
+
 .calendar-offday-hint {
   margin-top: -2px;
   margin-bottom: 8px;
@@ -1327,6 +1331,17 @@ input[type='file'] {
     text-overflow: clip;
     white-space: normal;
     overflow: hidden;
+  }
+
+  .mobile-selected-name {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.6rem;
+    line-height: 1.2;
+    color: var(--text-primary);
+    opacity: 0.95;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .calendar-panel td > div:not(.day) {
