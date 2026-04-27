@@ -28,21 +28,16 @@ function resolveAppVersion(): string {
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
   }
-  const packageVersion = extractSemverTag(packageJson.version ?? '') || 'v0.0.0'
+  const packageVersion = extractSemverTag(packageJson.version ?? '')
+  if (packageVersion) {
+    return packageVersion
+  }
 
   try {
-    const tag = execSync('git describe --tags --match \"v[0-9]*\" --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim()
-    const normalizedTag = extractSemverTag(tag)
-    return normalizedTag || packageVersion
+    const commitSha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    return commitSha ? `git-${commitSha}` : 'v0.0.0'
   } catch {
-    try {
-      const commitSha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-      return commitSha ? `${packageVersion}+${commitSha}` : packageVersion
-    } catch {
-      return packageVersion
-    }
+    return 'v0.0.0'
   }
 }
 
