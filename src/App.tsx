@@ -1507,7 +1507,6 @@ function App() {
 
           <section className="panel preview-panel">
             <h2>Nyomtatási előnézet</h2>
-            <p>Ez fixen azt mutatja, ami PDF/JPG exportban megjelenik.</p>
             <iframe
               key={printPreviewFrameKey}
               title="Nyomtatási előnézet"
