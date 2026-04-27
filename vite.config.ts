@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 function extractSemverTag(value: string): string {
-  const match = value.match(/v?\d+\.\d+\.\d+/i)
+  const match = value.match(/v?\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?/i)
   if (!match) {
     return ''
   }
