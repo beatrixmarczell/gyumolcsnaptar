@@ -231,6 +231,7 @@ function App() {
   })
   const [offDayRangeFrom, setOffDayRangeFrom] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
   const [offDayRangeTo, setOffDayRangeTo] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
+  const [offDaySelectionAnchor, setOffDaySelectionAnchor] = useState<string | null>(null)
   const [manualOverridesByMonth, setManualOverridesByMonth] = useState<
     Record<string, Record<string, string>>
   >(() => {
@@ -1069,18 +1070,59 @@ function App() {
     applyExtraOffDays(keys)
   }
 
+  const removeExtraOffDays = (dateKeys: string[]): void => {
+    const normalizedKeys = [...new Set(dateKeys.filter(Boolean))].sort()
+    if (normalizedKeys.length === 0) {
+      return
+    }
+    const keysToRemove = new Set(normalizedKeys)
+    const touchedMonths = new Set<string>()
+    setMonthOffDaysByMonth((prev) => {
+      const next = { ...prev }
+      for (const dateKey of normalizedKeys) {
+        touchedMonths.add(dateKey.slice(0, 7))
+      }
+      touchedMonths.forEach((monthKey) => {
+        const currentKeys = parseDateKeys(next[monthKey] ?? '')
+        next[monthKey] = serializeDateKeys(currentKeys.filter((key) => !keysToRemove.has(key)))
+      })
+      return next
+    })
+    // Off-day changes must reflow daily assignments continuously on touched months.
+    setManualOverridesByMonth((prev) => {
+      const next = { ...prev }
+      touchedMonths.forEach((monthKey) => {
+        next[monthKey] = {}
+      })
+      return next
+    })
+  }
+
   const removeExtraOffDay = (dateKey: string): void => {
-    const next = serializeDateKeys(extraOffDayList.filter((item) => item !== dateKey))
-    setExtraOffDaysText(next)
-    setMonthOffDaysByMonth((prev) => ({
-      ...prev,
-      [monthValue]: next,
-    }))
-    // Off-day changes must reflow daily assignments continuously.
-    setManualOverridesByMonth((prev) => ({
-      ...prev,
-      [monthValue]: {},
-    }))
+    removeExtraOffDays([dateKey])
+  }
+
+  const toggleCalendarOffDay = (dateKey: string, withRangeSelection: boolean): void => {
+    if (!canEdit) {
+      return
+    }
+    const targetKeys =
+      withRangeSelection && offDaySelectionAnchor
+        ? enumerateDateKeysInclusive(
+            offDaySelectionAnchor <= dateKey ? offDaySelectionAnchor : dateKey,
+            offDaySelectionAnchor <= dateKey ? dateKey : offDaySelectionAnchor,
+          )
+        : [dateKey]
+    if (targetKeys.length === 0) {
+      return
+    }
+    const shouldAdd = targetKeys.some((key) => !extraOffDays.has(key))
+    if (shouldAdd) {
+      applyExtraOffDays(targetKeys)
+    } else {
+      removeExtraOffDays(targetKeys)
+    }
+    setOffDaySelectionAnchor(dateKey)
   }
 
   const refreshSwapRequests = async (): Promise<void> => {
@@ -1873,6 +1915,11 @@ function App() {
                 aria-label="Hónap választás"
               />
             </div>
+            {canEdit ? (
+              <p className="compact-note calendar-offday-hint">
+                Tipp: jobb felső +/− ikonnal egy napot állítasz szünnappá; Shift + kattintásnál intervallumot vált.
+              </p>
+            ) : null}
             <table>
               <thead>
                 <tr>
@@ -1893,8 +1940,26 @@ function App() {
                       }
                       const isOffDay = extraOffDays.has(item.dateKey)
                       return (
-                        <td key={item.dateKey} className={item.child ? '' : 'offday'}>
+                        <td key={item.dateKey} className={`calendar-day-cell ${item.child ? '' : 'offday'} ${canEdit ? 'calendar-day-cell--editable' : ''}`}>
                           <div className="day">{item.date.getDate()}</div>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className={`offday-toggle-button ${isOffDay ? 'is-offday' : ''}`}
+                              title="Katt: szünnap be/ki, Shift+katt: intervallum"
+                              aria-label={
+                                isOffDay
+                                  ? `Szünnap törlése: ${item.dateKey}`
+                                  : `Szünnappá jelölés: ${item.dateKey}`
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleCalendarOffDay(item.dateKey, e.shiftKey)
+                              }}
+                            >
+                              {isOffDay ? '−' : '+'}
+                            </button>
+                          ) : null}
                           {canEdit ? (
                             item.child ? (
                               <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
