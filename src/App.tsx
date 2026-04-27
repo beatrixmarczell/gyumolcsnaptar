@@ -18,7 +18,6 @@ import {
 } from './lib/supabaseState'
 import {
   approveSwapOffer,
-  clearClosedSwapRequests,
   createSwapOffer,
   createSwapRequest,
   deleteSwapRequest,
@@ -332,7 +331,7 @@ function App() {
   const [swapRequestDateKey, setSwapRequestDateKey] = useState('')
   const [swapOfferDateByRequest, setSwapOfferDateByRequest] = useState<Record<string, string>>({})
   const [swapBusy, setSwapBusy] = useState(false)
-  const [showClosedSwapRequests, setShowClosedSwapRequests] = useState(false)
+  const [showClosedSwapRequests] = useState(false)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -1167,26 +1166,6 @@ function App() {
     }
   }
 
-  const handleClearClosedSwapRequests = async (): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken) {
-      return
-    }
-    const ok = window.confirm('Biztosan törlöd az összes lezárt/visszavont csere-kérést?')
-    if (!ok) {
-      return
-    }
-    setSwapBusy(true)
-    setSwapError(null)
-    try {
-      await clearClosedSwapRequests({ accessToken: gatewayAccessToken })
-      await refreshSwapRequests()
-    } catch (error) {
-      setSwapError(mapSwapUiError(error))
-    } finally {
-      setSwapBusy(false)
-    }
-  }
-
   const handleCreateSwapRequest = async (): Promise<void> => {
     if (!swapAdminTestEnabled || !gatewayAccessToken || !swapRequestDateKey || children.length === 0) {
       return
@@ -1280,8 +1259,39 @@ function App() {
     try {
       await approveSwapOffer({ accessToken: gatewayAccessToken, requestId, offerId })
       await refreshSwapRequests()
-      setCloudStatus('loading')
-      cloudBootstrapStarted.current = false
+      if (CLOUD_SYNC) {
+        setCloudStatus('loading')
+        try {
+          const remote = await fetchGroupState({ accessToken: gatewayAccessToken })
+          setUserRole((prev) => keepHigherRole(prev, remote.role))
+          setUserProfileId(remote.userProfileId ?? null)
+          if (remote.displayName) {
+            setUserDisplayName(remote.displayName)
+          }
+          if (remote.payload) {
+            applyAppStatePayload(remote, {
+              setChildrenText,
+              setMonthValue,
+              setStartChildByMonth,
+              setMonthOffDaysByMonth,
+              setManualOverridesByMonth,
+              setExcludedChildrenByMonth,
+              setHeaderImage,
+              setUiTheme,
+              setDarkMode,
+              setSettingsPanelOpen,
+              setStartChild,
+              setExtraOffDaysText,
+              setManualOverrides: () => {},
+            })
+          }
+          setCloudStatus('ok')
+          await refreshSwapRequests()
+        } catch (error) {
+          console.error('Felhő újratöltés jóváhagyás után:', error)
+          setCloudStatus('err')
+        }
+      }
     } catch (error) {
       setSwapError(mapSwapUiError(error))
     } finally {
@@ -1558,11 +1568,6 @@ function App() {
           {swapAdminTestEnabled ? (
             <section className="panel swap-admin-panel">
               <h2>Parent Swap (Admin Test Mode)</h2>
-              <p className="compact-note">
-                A törlés itt a csere-kérésekre vonatkozik: lezárt/visszavont kérés törölhető egyenként (piros ×), vagy egy
-                gombbal csoportosan. A zárójelben a kérés/ajánlat státusza látszik.
-              </p>
-              <p className="compact-note">NEXT-only teszt panel: kérés, ajánlat, visszavonás, jóváhagyás.</p>
               <div className="swap-admin-actions">
                 <label>
                   Kérés dátuma
@@ -1577,35 +1582,11 @@ function App() {
                 </label>
                 <button
                   type="button"
-                  className="action-button"
+                  className="action-button swap-primary-action"
                   disabled={swapBusy || !swapRequestDateKey}
                   onClick={() => void handleCreateSwapRequest()}
                 >
                   Csere kérés indítása
-                </button>
-                <button
-                  type="button"
-                  className="action-button secondary"
-                  disabled={swapBusy || swapLoading}
-                  onClick={() => void refreshSwapRequests()}
-                >
-                  Frissítés
-                </button>
-                <button
-                  type="button"
-                  className="action-button secondary"
-                  disabled={swapBusy || !swapRequests.some((request) => request.status !== 'requested')}
-                  onClick={() => void handleClearClosedSwapRequests()}
-                >
-                  Lezárt / visszavont kérések törlése
-                </button>
-                <button
-                  type="button"
-                  className="action-button secondary"
-                  disabled={swapBusy}
-                  onClick={() => setShowClosedSwapRequests((prev) => !prev)}
-                >
-                  {showClosedSwapRequests ? 'Lezártak elrejtése' : 'Lezártak mutatása'}
                 </button>
               </div>
               {swapError ? <p className="cloud-pill cloud-pill--err">{swapError}</p> : null}
@@ -1624,7 +1605,7 @@ function App() {
                       <div className="swap-offer-actions">
                         <button
                           type="button"
-                          className="action-button secondary"
+                          className="action-button secondary swap-compact-action"
                           disabled={swapBusy}
                           onClick={() => void handleWithdrawRequest(request.id)}
                         >
