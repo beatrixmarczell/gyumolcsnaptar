@@ -129,16 +129,6 @@ function enumerateDateKeysInclusive(fromDateKey: string, toDateKeyValue: string)
   return out
 }
 
-function normalizeMonthValue(value: string): string {
-  const [yearText, monthText] = value.split('-')
-  const year = Number(yearText)
-  const month = Number(monthText)
-  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
-    return value
-  }
-  return `${year}-${`${month}`.padStart(2, '0')}`
-}
-
 function toMonthValue(year: number, monthIndex: number): string {
   return `${year}-${`${monthIndex + 1}`.padStart(2, '0')}`
 }
@@ -226,12 +216,9 @@ function App() {
   const [extraOffDaysText, setExtraOffDaysText] = useState(() => {
     return monthOffDaysByMonth['2026-02'] ?? ''
   })
-  const [offDayPickerValue, setOffDayPickerValue] = useState(() => {
-    return `${normalizeMonthValue(monthValue)}-01`
-  })
-  const [offDayRangeFrom, setOffDayRangeFrom] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
-  const [offDayRangeTo, setOffDayRangeTo] = useState(() => `${normalizeMonthValue(monthValue)}-01`)
   const [offDaySelectionAnchor, setOffDaySelectionAnchor] = useState<string | null>(null)
+  const [offDayDragMode, setOffDayDragMode] = useState<'add' | 'remove' | null>(null)
+  const offDayDragTouchedRef = useRef<Set<string>>(new Set())
   const [manualOverridesByMonth, setManualOverridesByMonth] = useState<
     Record<string, Record<string, string>>
   >(() => {
@@ -484,12 +471,6 @@ function App() {
   }, [monthValue, monthOffDaysByMonth])
 
   useEffect(() => {
-    setOffDayPickerValue(`${normalizeMonthValue(monthValue)}-01`)
-    setOffDayRangeFrom(`${normalizeMonthValue(monthValue)}-01`)
-    setOffDayRangeTo(`${normalizeMonthValue(monthValue)}-01`)
-  }, [monthValue])
-
-  useEffect(() => {
     const forced = forcedMonthStartRef.current
     if (forced && forced.monthValue === monthValue) {
       setStartChild(forced.startChild)
@@ -591,10 +572,6 @@ function App() {
     return new Set(parseDateKeys(extraOffDaysText))
   }, [extraOffDaysText])
   const extraOffDayList = useMemo(() => parseDateKeys(extraOffDaysText), [extraOffDaysText])
-  const maxDateInMonth = useMemo(() => {
-    return toDateKey(new Date(year, monthIndex + 1, 0))
-  }, [year, monthIndex])
-
   const workingDays = useMemo(
     () => getMonthWorkingDays(year, monthIndex, extraOffDays),
     [year, monthIndex, extraOffDays],
@@ -1016,18 +993,6 @@ function App() {
     }
   }
 
-  const addExtraOffDay = (): void => {
-    if (!offDayPickerValue) {
-      return
-    }
-    const normalizedMonth = normalizeMonthValue(monthValue)
-    if (!offDayPickerValue.startsWith(`${normalizedMonth}-`)) {
-      alert(`Kérlek az aktuális hónapból válassz dátumot: ${normalizedMonth}`)
-      return
-    }
-    applyExtraOffDays([offDayPickerValue])
-  }
-
   const applyExtraOffDays = (dateKeys: string[]): void => {
     const normalizedKeys = [...new Set(dateKeys.filter(Boolean))].sort()
     if (normalizedKeys.length === 0) {
@@ -1052,22 +1017,6 @@ function App() {
       })
       return next
     })
-  }
-
-  const addExtraOffDayRange = (): void => {
-    if (!offDayRangeFrom || !offDayRangeTo) {
-      return
-    }
-    if (offDayRangeFrom > offDayRangeTo) {
-      alert('A tól dátum nem lehet későbbi, mint az ig dátum.')
-      return
-    }
-    const keys = enumerateDateKeysInclusive(offDayRangeFrom, offDayRangeTo)
-    if (keys.length === 0) {
-      alert('Érvénytelen intervallum.')
-      return
-    }
-    applyExtraOffDays(keys)
   }
 
   const removeExtraOffDays = (dateKeys: string[]): void => {
@@ -1098,10 +1047,6 @@ function App() {
     })
   }
 
-  const removeExtraOffDay = (dateKey: string): void => {
-    removeExtraOffDays([dateKey])
-  }
-
   const toggleCalendarOffDay = (dateKey: string, withRangeSelection: boolean): void => {
     if (!canEdit) {
       return
@@ -1124,6 +1069,57 @@ function App() {
     }
     setOffDaySelectionAnchor(dateKey)
   }
+
+  const beginCalendarOffDayDrag = (dateKey: string): void => {
+    if (!canEdit) {
+      return
+    }
+    const dragMode: 'add' | 'remove' = extraOffDays.has(dateKey) ? 'remove' : 'add'
+    offDayDragTouchedRef.current = new Set([dateKey])
+    if (dragMode === 'add') {
+      applyExtraOffDays([dateKey])
+    } else {
+      removeExtraOffDays([dateKey])
+    }
+    setOffDayDragMode(dragMode)
+    setOffDaySelectionAnchor(dateKey)
+  }
+
+  const extendCalendarOffDayDrag = (dateKey: string): void => {
+    if (!canEdit || !offDayDragMode) {
+      return
+    }
+    if (offDayDragTouchedRef.current.has(dateKey)) {
+      return
+    }
+    offDayDragTouchedRef.current.add(dateKey)
+    if (offDayDragMode === 'add') {
+      applyExtraOffDays([dateKey])
+    } else {
+      removeExtraOffDays([dateKey])
+    }
+  }
+
+  const stopCalendarOffDayDrag = (): void => {
+    if (!offDayDragMode) {
+      return
+    }
+    offDayDragTouchedRef.current.clear()
+    setOffDayDragMode(null)
+  }
+
+  useEffect(() => {
+    if (!offDayDragMode) {
+      return
+    }
+    const handleMouseUp = (): void => {
+      stopCalendarOffDayDrag()
+    }
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [offDayDragMode])
 
   const refreshSwapRequests = async (): Promise<void> => {
     if (!swapAdminTestEnabled || !gatewayAccessToken) {
@@ -1489,116 +1485,6 @@ function App() {
         <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
           <h2>Beállítások</h2>
 
-          <label>
-            Kezdő gyerek
-            <select
-              value={startChild}
-              disabled={!canEdit}
-              onChange={(e) => {
-                const value = e.target.value
-                setStartChild(value)
-                setStartChildByMonth((prev) => ({
-                  ...prev,
-                  [monthValue]: value,
-                }))
-                // Start child change should regenerate month sequence from scratch.
-                setManualOverridesByMonth((prev) => ({
-                  ...prev,
-                  [monthValue]: {},
-                }))
-              }}
-            >
-              {children.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <details className="collapsible-box">
-            <summary>Extra szünnapok (naptárból választható)</summary>
-            <label>
-              Szünnap hozzáadása
-              <div className="date-picker-row">
-                <input
-                  type="date"
-                  value={offDayPickerValue}
-                  min={`${normalizeMonthValue(monthValue)}-01`}
-                  max={maxDateInMonth}
-                  disabled={!canEdit}
-                  onChange={(e) => setOffDayPickerValue(e.target.value)}
-                  onFocus={(e) => {
-                    const picker = e.currentTarget as HTMLInputElement & { showPicker?: () => void }
-                    try {
-                      picker.showPicker?.()
-                    } catch {
-                      // Browsers without showPicker keep native default behavior.
-                    }
-                  }}
-                  onClick={(e) => {
-                    const picker = e.currentTarget as HTMLInputElement & { showPicker?: () => void }
-                    try {
-                      picker.showPicker?.()
-                    } catch {
-                      // Browsers without showPicker keep native default behavior.
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="action-button extra-off-day-add"
-                  title="Szünnap hozzáadása"
-                  aria-label="Szünnap hozzáadása"
-                  disabled={!canEdit}
-                  onClick={addExtraOffDay}
-                >
-                  +
-                </button>
-              </div>
-            </label>
-            <label>
-              Szünnap intervallum (tól-ig)
-              <div className="date-range-row">
-                <div className="date-range-inputs">
-                  <input type="date" value={offDayRangeFrom} disabled={!canEdit} onChange={(e) => setOffDayRangeFrom(e.target.value)} />
-                  <input type="date" value={offDayRangeTo} disabled={!canEdit} onChange={(e) => setOffDayRangeTo(e.target.value)} />
-                </div>
-                <button
-                  type="button"
-                  className="action-button"
-                  title="Intervallum hozzáadása"
-                  aria-label="Intervallum hozzáadása"
-                  disabled={!canEdit}
-                  onClick={addExtraOffDayRange}
-                >
-                  Intervallum hozzáadása
-                </button>
-              </div>
-            </label>
-            {extraOffDayList.length > 0 ? (
-              <ul className="extra-off-days-list">
-                {extraOffDayList.map((dateKey) => (
-                  <li key={dateKey}>
-                    <span>{dateKey}</span>
-                    <button
-                      type="button"
-                      className="action-button secondary extra-off-day-remove"
-                      title="Szünnap törlése"
-                      aria-label={`Szünnap törlése: ${dateKey}`}
-                      disabled={!canEdit}
-                      onClick={() => removeExtraOffDay(dateKey)}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="compact-note">Ehhez a hónaphoz még nincs extra szünnap megadva.</p>
-            )}
-          </details>
-
           <details className="collapsible-box">
             <summary>Névsor (1 sor = 1 név)</summary>
             <label>
@@ -1940,7 +1826,24 @@ function App() {
                       }
                       const isOffDay = extraOffDays.has(item.dateKey)
                       return (
-                        <td key={item.dateKey} className={`calendar-day-cell ${item.child ? '' : 'offday'} ${canEdit ? 'calendar-day-cell--editable' : ''}`}>
+                        <td
+                          key={item.dateKey}
+                          className={`calendar-day-cell ${item.child ? '' : 'offday'} ${canEdit ? 'calendar-day-cell--editable' : ''}`}
+                          onMouseDown={(e) => {
+                            if (!canEdit || e.button !== 0) {
+                              return
+                            }
+                            const target = e.target as HTMLElement
+                            if (target.closest('button,select,input,textarea,a,label')) {
+                              return
+                            }
+                            e.preventDefault()
+                            beginCalendarOffDayDrag(item.dateKey)
+                          }}
+                          onMouseEnter={() => {
+                            extendCalendarOffDayDrag(item.dateKey)
+                          }}
+                        >
                           <div className="day">{item.date.getDate()}</div>
                           {canEdit ? (
                             <button

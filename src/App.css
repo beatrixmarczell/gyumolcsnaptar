@@ -923,6 +923,10 @@ td select {
   position: relative;
 }
 
+.calendar-day-cell--editable {
+  cursor: cell;
+}
+
 .offday-toggle-button {
   position: absolute;
   top: 4px;
