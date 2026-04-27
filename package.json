@@ -1,7 +1,7 @@
 {
   "name": "gyumolcsnaptar",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.0.1-alpha.1",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
