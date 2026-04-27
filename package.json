@@ -9,6 +9,9 @@
     "build": "tsc -b && vite build",
     "build:desktop:web": "tsc -b && vite build --mode desktop",
     "build:desktop": "npm run build:desktop:web && electron-packager . Gyumolcsnaptar --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/(src|supabase|node_modules/.cache|release)/\"",
+    "infra:up": "docker compose -f keycloak/docker-compose.yml up -d",
+    "infra:down": "docker compose -f keycloak/docker-compose.yml down",
+    "infra:logs": "docker compose -f keycloak/docker-compose.yml logs -f keycloak cloudflared",
     "lint": "eslint .",
     "preview": "vite preview"
   },

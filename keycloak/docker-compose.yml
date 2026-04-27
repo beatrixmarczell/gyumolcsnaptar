@@ -9,5 +9,16 @@ services:
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+    restart: unless-stopped
     volumes:
       - ./realm:/opt/keycloak/data/import
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.8.1
+    command: tunnel --config /etc/cloudflared/config.yml run
+    depends_on:
+      - keycloak
+    restart: unless-stopped
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ${CLOUDFLARED_CREDENTIALS_FILE}:/etc/cloudflared/credentials.json:ro

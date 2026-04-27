@@ -1,0 +1,6 @@
+tunnel: a4de70c3-84bd-4ab6-a27d-1b2578b15f26
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: auth.gyuminaptar.hu
+    service: http://keycloak:8080
+  - service: http_status:404

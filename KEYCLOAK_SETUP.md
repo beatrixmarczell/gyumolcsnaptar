@@ -2,12 +2,26 @@
 
 Ez a projekt Keycloak OIDC bejelentkezést használ a közös naptár védésére.
 
-## 1) Keycloak indítás (lokál teszt)
+## 1) Keycloak + Tunnel indítás (lokál teszt, fix)
 
-1. Nyisd meg a `keycloak` mappát.
-2. Indítás: `docker compose up -d`
-3. Admin felület: [http://localhost:8080](http://localhost:8080)
-4. Belépés: `admin / admin`
+1. A `keycloak/.env.example` fájlt másold `.env` néven a `keycloak` mappába.
+2. A `.env`-ben állítsd be:
+   - `CLOUDFLARED_CREDENTIALS_FILE=C:/Users/<te-felhasznalo>/.cloudflared/a4de70c3-84bd-4ab6-a27d-1b2578b15f26.json`
+3. Projekt gyökérből indítás:
+   - `npm run infra:up`
+4. Ellenőrzés:
+   - Keycloak admin: [http://localhost:8080](http://localhost:8080) (`admin / admin`)
+   - Auth host: `https://auth.gyuminaptar.hu`
+
+Leállítás:
+
+- `npm run infra:down`
+
+Logok:
+
+- `npm run infra:logs`
+
+Megjegyzés: a compose-ban a `keycloak` és a `cloudflared` is `restart: unless-stopped` módban fut, így Docker újraindítás után automatikusan visszaállnak.
 
 A realm import automatikus (`keycloak/realm/gyumolcsnaptar-realm.json`):
 - realm: `gyumolcsnaptar`
