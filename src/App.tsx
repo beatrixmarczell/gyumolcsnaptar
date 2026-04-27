@@ -679,7 +679,7 @@ function App() {
     return normalized === 'admin.demo' || normalized === 'admin_demo' || normalized.includes('demo admin')
   }, [userDisplayName])
   const swapAdminTestEnabled =
-    SWAP_ADMIN_TEST_MODE && IS_NEXT_CHANNEL && KEYCLOAK_AUTH && isAuthenticated && userRole === 'admin'
+    SWAP_ADMIN_TEST_MODE && KEYCLOAK_AUTH && isAuthenticated && userRole === 'admin'
   const visibleSwapRequests = useMemo(
     () => (showClosedSwapRequests ? swapRequests : swapRequests.filter((request) => request.status === 'requested')),
     [showClosedSwapRequests, swapRequests],
