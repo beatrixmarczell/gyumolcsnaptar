@@ -55,7 +55,9 @@ const LAST_MONTH_STORAGE_KEY = 'fruit-calendar-last-month'
 const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
+const OFFDAY_LABEL_STORAGE_KEY = 'fruit-calendar-offday-label'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
+const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli munkanap'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
 const APP_VERSION_DISPLAY = (() => {
@@ -252,6 +254,10 @@ function App() {
     }
     return stored === 'true'
   })
+  const [offDayLabel, setOffDayLabel] = useState(() => {
+    const stored = localStorage.getItem(OFFDAY_LABEL_STORAGE_KEY)
+    return stored?.trim() ? stored : DEFAULT_OFFDAY_LABEL
+  })
   const [cloudStatus, setCloudStatus] = useState<'off' | 'loading' | 'ok' | 'err'>(() => {
     return CLOUD_SYNC ? 'loading' : 'off'
   })
@@ -284,9 +290,11 @@ function App() {
   const [isRestoreBusy, setIsRestoreBusy] = useState(false)
   const [childFilter, setChildFilter] = useState('')
   const [childFilterPanelOpen, setChildFilterPanelOpen] = useState(true)
+  const [editingOffDayLabelCellKey, setEditingOffDayLabelCellKey] = useState<string | null>(null)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
+  const offDayLabelInputRef = useRef<HTMLInputElement | null>(null)
 
   const canEdit = KEYCLOAK_AUTH
     ? isAuthenticated && (userRole === 'admin' || userRole === 'editor')
@@ -355,6 +363,7 @@ function App() {
             setUiTheme,
             setDarkMode,
             setSettingsPanelOpen,
+            setOffDayLabel,
             setStartChild,
             setExtraOffDaysText,
             setManualOverrides: () => {},
@@ -389,6 +398,7 @@ function App() {
       uiTheme,
       darkMode,
       settingsPanelOpen,
+      offDayLabel,
     })
     const timer = setTimeout(() => {
       void saveGroupState(payload, { accessToken: gatewayAccessToken, role: userRole })
@@ -410,6 +420,7 @@ function App() {
     uiTheme,
     darkMode,
     settingsPanelOpen,
+    offDayLabel,
     canSaveToCloud,
     isAuthenticated,
     gatewayAccessToken,
@@ -498,6 +509,19 @@ function App() {
     localStorage.setItem(SETTINGS_PANEL_OPEN_STORAGE_KEY, `${settingsPanelOpen}`)
   }, [settingsPanelOpen])
 
+  useEffect(() => {
+    const normalized = offDayLabel.trim()
+    localStorage.setItem(OFFDAY_LABEL_STORAGE_KEY, normalized || DEFAULT_OFFDAY_LABEL)
+  }, [offDayLabel])
+
+  useEffect(() => {
+    if (!editingOffDayLabelCellKey) {
+      return
+    }
+    offDayLabelInputRef.current?.focus()
+    offDayLabelInputRef.current?.select()
+  }, [editingOffDayLabelCellKey])
+
   const children = useMemo(() => {
     return childrenText
       .split('\n')
@@ -581,17 +605,18 @@ function App() {
       weekdays,
       weeks,
       offDayDateKeys: new Set(extraOffDayList),
+      offDayLabel,
       headerImage,
       displayYear: year,
       displayMonthIndex: monthIndex,
     })
-  }, [exportTitle, weeks, extraOffDayList, headerImage, year, monthIndex])
+  }, [exportTitle, weeks, extraOffDayList, offDayLabel, headerImage, year, monthIndex])
   const printPreviewFrameHtml = useMemo(() => {
     return buildResponsivePreviewHtml(printPreviewHtml)
   }, [printPreviewHtml])
   const printPreviewFrameKey = useMemo(() => {
-    return `${monthValue}:${extraOffDaysText}:${JSON.stringify(manualOverrides)}:${printPreviewHtml.length}`
-  }, [monthValue, extraOffDaysText, manualOverrides, printPreviewHtml])
+    return `${monthValue}:${extraOffDaysText}:${offDayLabel}:${JSON.stringify(manualOverrides)}:${printPreviewHtml.length}`
+  }, [monthValue, extraOffDaysText, offDayLabel, manualOverrides, printPreviewHtml])
   const currentPayload = useMemo(
     () =>
       buildAppStatePayload({
@@ -605,6 +630,7 @@ function App() {
         uiTheme,
         darkMode,
         settingsPanelOpen,
+        offDayLabel,
       }),
     [
       childrenText,
@@ -617,6 +643,7 @@ function App() {
       uiTheme,
       darkMode,
       settingsPanelOpen,
+      offDayLabel,
     ],
   )
   const currentPayloadSignature = useMemo(() => JSON.stringify(currentPayload), [currentPayload])
@@ -1004,6 +1031,18 @@ function App() {
     setOffDayDragMode(null)
   }
 
+  const startEditingOffDayLabel = (dateKey: string): void => {
+    if (!canEdit) {
+      return
+    }
+    setEditingOffDayLabelCellKey(dateKey)
+  }
+
+  const commitOffDayLabelEdit = (): void => {
+    setOffDayLabel((prev) => prev.trim() || DEFAULT_OFFDAY_LABEL)
+    setEditingOffDayLabelCellKey(null)
+  }
+
   useEffect(() => {
     if (!offDayDragMode) {
       return
@@ -1066,6 +1105,7 @@ function App() {
           setUiTheme,
           setDarkMode,
           setSettingsPanelOpen,
+          setOffDayLabel,
           setStartChild,
           setExtraOffDaysText,
           setManualOverrides: () => {},
@@ -1438,7 +1478,40 @@ function App() {
                               </select>
                             ) : (
                               <div className={`offday-cell ${isImportedHolidayGap ? 'holiday-gap-cell' : ''}`}>
-                                {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
+                                {isOffDay ? (
+                                  editingOffDayLabelCellKey === item.dateKey ? (
+                                    <input
+                                      ref={offDayLabelInputRef}
+                                      type="text"
+                                      className="offday-label"
+                                      value={offDayLabel}
+                                      onChange={(e) => setOffDayLabel(e.target.value)}
+                                      onBlur={commitOffDayLabelEdit}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault()
+                                          commitOffDayLabelEdit()
+                                        }
+                                        if (e.key === 'Escape') {
+                                          e.preventDefault()
+                                          setEditingOffDayLabelCellKey(null)
+                                        }
+                                      }}
+                                    />
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="offday-label"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        startEditingOffDayLabel(item.dateKey)
+                                      }}
+                                      title="Felirat szerkesztése"
+                                    >
+                                      {offDayLabel || DEFAULT_OFFDAY_LABEL}
+                                    </button>
+                                  )
+                                ) : null}
                                 {isImportedHolidayGap ? <span className="offday-label">Munkaszüneti nap</span> : null}
                               </div>
                             )
@@ -1447,7 +1520,7 @@ function App() {
                               <div>{item.child}</div>
                             ) : (
                               <div className={`offday-cell offday-cell-readonly ${isImportedHolidayGap ? 'holiday-gap-cell' : ''}`}>
-                                {isOffDay ? <span className="offday-label">Nevelés nélküli munkanap</span> : null}
+                                {isOffDay ? <span className="offday-label">{offDayLabel || DEFAULT_OFFDAY_LABEL}</span> : null}
                                 {isImportedHolidayGap ? <span className="offday-label">Munkaszüneti nap</span> : null}
                               </div>
                             )
@@ -1620,11 +1693,12 @@ function buildPdfHtml(params: {
   weekdays: string[]
   weeks: ReturnType<typeof chunkByWeek>
   offDayDateKeys: Set<string>
+  offDayLabel: string
   headerImage: HeaderImageState | null
   displayYear: number
   displayMonthIndex: number
 }): string {
-  const { title, weekdays, weeks, offDayDateKeys, headerImage, displayYear, displayMonthIndex } = params
+  const { title, weekdays, weeks, offDayDateKeys, offDayLabel, headerImage, displayYear, displayMonthIndex } = params
   const headColumns = weekdays
     .map(
       (day) =>
@@ -1661,7 +1735,9 @@ function buildPdfHtml(params: {
           const background = item ? (isOffDay ? '#eef6ea' : isImportedHolidayGap ? '#e8eef9' : '#f4e9dd') : '#f3f4f6'
           const content = item
             ? isOffDay
-              ? '<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#6f7c72;opacity:0.85;">Nevelés nélküli munkanap</span>'
+              ? `<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#6f7c72;opacity:0.85;">${escapeHtml(
+                  offDayLabel || DEFAULT_OFFDAY_LABEL,
+                )}</span>`
               : isImportedHolidayGap
                 ? '<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#5d6f89;opacity:0.88;">Munkaszüneti nap</span>'
               : escapeHtml(item.child)
