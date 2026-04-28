@@ -15,6 +15,7 @@ import {
 } from './supabaseClient'
 
 const HEADER_KEY = 'fruit-calendar-header-image'
+const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli munkanap'
 
 function isHeaderImageState(v: unknown): v is HeaderImageState {
   if (!v || typeof v !== 'object') {
@@ -70,6 +71,9 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
   if (typeof p.darkMode !== 'boolean' || typeof p.settingsPanelOpen !== 'boolean') {
     return null
   }
+  if (p.offDayLabel != null && typeof p.offDayLabel !== 'string') {
+    return null
+  }
   if (p.headerImage != null && !isHeaderImageState(p.headerImage)) {
     return null
   }
@@ -109,6 +113,7 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
     uiTheme: p.uiTheme as AppStatePayload['uiTheme'],
     darkMode: p.darkMode,
     settingsPanelOpen: p.settingsPanelOpen,
+    offDayLabel: p.offDayLabel ?? DEFAULT_OFFDAY_LABEL,
   }
 }
 
@@ -287,6 +292,7 @@ export function applyAppStatePayload(
     setUiTheme: (v: 'elegant' | 'pastel' | 'minimal') => void
     setDarkMode: (v: boolean) => void
     setSettingsPanelOpen: (v: boolean) => void
+    setOffDayLabel: (v: string) => void
     setStartChild: (v: string) => void
     setExtraOffDaysText: (v: string) => void
     setManualOverrides: (v: Record<string, string>) => void
@@ -307,6 +313,7 @@ export function applyAppStatePayload(
     setUiTheme,
     setDarkMode,
     setSettingsPanelOpen,
+    setOffDayLabel,
     setStartChild,
     setExtraOffDaysText,
     setManualOverrides,
@@ -323,6 +330,7 @@ export function applyAppStatePayload(
   void setUiTheme
   void setDarkMode
   setSettingsPanelOpen(p.settingsPanelOpen)
+  setOffDayLabel((p.offDayLabel ?? DEFAULT_OFFDAY_LABEL).trim() || DEFAULT_OFFDAY_LABEL)
   persistHeaderToLocalStorage(p.headerImage)
   setStartChild(mergedStart[p.monthValue] ?? mergedStart['2026-02'] ?? 'Petrilla Ádám')
   setExtraOffDaysText(p.monthOffDaysByMonth[p.monthValue] ?? '')
@@ -340,6 +348,7 @@ export function buildAppStatePayload(s: {
   uiTheme: 'elegant' | 'pastel' | 'minimal'
   darkMode: boolean
   settingsPanelOpen: boolean
+  offDayLabel: string
 }): AppStatePayload {
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
@@ -353,6 +362,7 @@ export function buildAppStatePayload(s: {
     uiTheme: s.uiTheme,
     darkMode: s.darkMode,
     settingsPanelOpen: s.settingsPanelOpen,
+    offDayLabel: s.offDayLabel.trim() || DEFAULT_OFFDAY_LABEL,
   }
 }
 
