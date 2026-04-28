@@ -81,7 +81,8 @@ const APP_VERSION_DISPLAY = (() => {
 })()
 const IS_NEXT_CHANNEL = APP_CHANNEL === 'next'
 
-const CLOUD_SYNC = isCloudSyncAvailable() && !IS_NEXT_CHANNEL
+// Next branch is intentionally isolated from shared DB sync.
+const CLOUD_SYNC = false
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
 const KEYCLOAK_URL = (import.meta.env.VITE_KEYCLOAK_URL as string | undefined) ?? ''
