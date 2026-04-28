@@ -49,22 +49,52 @@ function resolveAppVersion(): string {
     return normalizedEnvVersion
   }
 
+  const ciTagCandidates = [
+    process.env.GITHUB_REF_NAME ?? '',
+    process.env.VERCEL_GIT_COMMIT_TAG ?? '',
+    process.env.CI_COMMIT_TAG ?? '',
+  ]
+  for (const candidate of ciTagCandidates) {
+    const normalized = extractSemverTag(candidate.trim())
+    if (normalized) {
+      return normalized
+    }
+  }
+
+  try {
+    const headTag = execSync('git tag --points-at HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .split('\n')
+      .map((line) => extractSemverTag(line.trim()))
+      .find(Boolean)
+    if (headTag) {
+      return headTag
+    }
+  } catch {
+    // Ignore missing git metadata and continue with fallbacks.
+  }
+
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
-  }
-  const packageVersion = extractSemverTag(packageJson.version ?? '')
-  if (packageVersion) {
-    return packageVersion
   }
 
   try {
     const commitSha =
       (process.env.VERCEL_GIT_COMMIT_SHA ?? '').trim().slice(0, 7) ||
       execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-    return commitSha ? `git-${commitSha}` : 'v0.0.0'
+    if (commitSha) {
+      return `git-${commitSha}`
+    }
   } catch {
-    return 'v0.0.0'
+    // Ignore and try package fallback.
   }
+
+  const packageVersion = extractSemverTag(packageJson.version ?? '')
+  if (packageVersion) {
+    return packageVersion
+  }
+
+  return 'v0.0.0'
 }
 
 // https://vite.dev/config/
