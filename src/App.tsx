@@ -10,7 +10,7 @@ import {
 } from './calendar'
 import type { AppUserRole, HeaderImageState } from './lib/cloudTypes'
 import { getAccessToken, initAuth, isKeycloakConfigured, login, logout } from './lib/auth/keycloakAuth'
-import { isCloudSyncAvailable, isKeycloakAuthEnabled } from './lib/supabaseClient'
+import { isKeycloakAuthEnabled } from './lib/supabaseClient'
 import {
   applyAppStatePayload,
   buildAppStatePayload,
