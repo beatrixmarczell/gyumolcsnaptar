@@ -1379,6 +1379,7 @@ function App() {
               setUiTheme,
               setDarkMode,
               setSettingsPanelOpen,
+              setOffDayLabelsByMonth,
               setStartChild,
               setExtraOffDaysText,
               setManualOverrides: () => {},
