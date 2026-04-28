@@ -390,8 +390,11 @@ function App() {
       setUserRole(session.role)
       setUserDisplayName(session.displayName ?? session.email)
       if (!session.authenticated) {
-        setCloudStatus('loading')
-        setCanSaveToCloud(true)
+        // Viewer mode: only show cloud "loading" when sync is actually enabled (waiting for login).
+        if (CLOUD_SYNC) {
+          setCloudStatus('loading')
+          setCanSaveToCloud(true)
+        }
         setAccessToken(null)
         return
       }
