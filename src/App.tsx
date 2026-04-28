@@ -1522,17 +1522,19 @@ function App() {
             <span className="app-version-discrete" title="Alkalmazás verziója">
               {APP_VERSION_DISPLAY}
             </span>
-            {CLOUD_SYNC ? (
-              <span
-                className={`cloud-pill cloud-pill--${cloudStatus === 'ok' ? 'ok' : cloudStatus === 'err' ? 'err' : 'loading'}`}
-                title="Közös adat a Supabase felhőben. Mindenki, aki a linket használja, ugyanazt a mentést látja."
-              >
-                {cloudStatus === 'loading' && 'Felhő: betöltés…'}
-                {cloudStatus === 'ok' && 'Felhő: mentve'}
-                {cloudStatus === 'err' && 'Felhő: hiba'}
-                {cloudStatus === 'off' && 'Felhő: —'}
-              </span>
-            ) : null}
+            <span
+              className={`cloud-pill cloud-pill--${cloudStatus === 'ok' ? 'ok' : cloudStatus === 'err' ? 'err' : cloudStatus === 'off' ? 'off' : 'loading'}`}
+              title={
+                CLOUD_SYNC
+                  ? 'Közös adat a Supabase felhőben. Mindenki, aki a linket használja, ugyanazt a mentést látja.'
+                  : 'A felhő szinkron kikapcsolva ezen a környezeten, adatbázis kapcsolat nélkül.'
+              }
+            >
+              {cloudStatus === 'loading' && 'Felhő: betöltés…'}
+              {cloudStatus === 'ok' && 'Felhő: mentve'}
+              {cloudStatus === 'err' && 'Felhő: hiba'}
+              {cloudStatus === 'off' && 'Felhő: kikapcsolva (nincs DB sync)'}
+            </span>
             {KEYCLOAK_AUTH && isAuthenticated ? (
               <span className="cloud-pill" title="Bejelentkezett felhasználó szerepkörrel.">
                 {authReady ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})` : 'Felhasználó: ellenőrzés…'}
