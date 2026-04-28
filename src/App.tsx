@@ -81,7 +81,7 @@ const APP_VERSION_DISPLAY = (() => {
 })()
 const IS_NEXT_CHANNEL = APP_CHANNEL === 'next'
 
-const CLOUD_SYNC = isCloudSyncAvailable()
+const CLOUD_SYNC = isCloudSyncAvailable() && !IS_NEXT_CHANNEL
 const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
 const KEYCLOAK_URL = (import.meta.env.VITE_KEYCLOAK_URL as string | undefined) ?? ''
