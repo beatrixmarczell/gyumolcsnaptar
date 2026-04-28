@@ -15,7 +15,6 @@ import {
 } from './supabaseClient'
 
 const HEADER_KEY = 'fruit-calendar-header-image'
-const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli munkanap'
 
 function isHeaderImageState(v: unknown): v is HeaderImageState {
   if (!v || typeof v !== 'object') {
@@ -42,6 +41,24 @@ function parseStartChildByMonth(
     return fallback
   }
   return { ...fallback, ...o } as Record<string, string>
+}
+
+function parseOffDayLabelsByMonth(raw: unknown): Record<string, Record<string, string>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {}
+  }
+  return Object.fromEntries(
+    Object.entries(raw).map(([month, value]) => [
+      month,
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.entries(value).filter(
+              (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+            ),
+          )
+        : {},
+    ]),
+  )
 }
 
 /**
@@ -71,7 +88,10 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
   if (typeof p.darkMode !== 'boolean' || typeof p.settingsPanelOpen !== 'boolean') {
     return null
   }
-  if (p.offDayLabel != null && typeof p.offDayLabel !== 'string') {
+  if (
+    p.offDayLabelsByMonth != null &&
+    (typeof p.offDayLabelsByMonth !== 'object' || Array.isArray(p.offDayLabelsByMonth))
+  ) {
     return null
   }
   if (p.headerImage != null && !isHeaderImageState(p.headerImage)) {
@@ -113,7 +133,7 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
     uiTheme: p.uiTheme as AppStatePayload['uiTheme'],
     darkMode: p.darkMode,
     settingsPanelOpen: p.settingsPanelOpen,
-    offDayLabel: p.offDayLabel ?? DEFAULT_OFFDAY_LABEL,
+    offDayLabelsByMonth: parseOffDayLabelsByMonth(p.offDayLabelsByMonth),
   }
 }
 
@@ -292,7 +312,7 @@ export function applyAppStatePayload(
     setUiTheme: (v: 'elegant' | 'pastel' | 'minimal') => void
     setDarkMode: (v: boolean) => void
     setSettingsPanelOpen: (v: boolean) => void
-    setOffDayLabel: (v: string) => void
+    setOffDayLabelsByMonth: (v: Record<string, Record<string, string>>) => void
     setStartChild: (v: string) => void
     setExtraOffDaysText: (v: string) => void
     setManualOverrides: (v: Record<string, string>) => void
@@ -313,7 +333,7 @@ export function applyAppStatePayload(
     setUiTheme,
     setDarkMode,
     setSettingsPanelOpen,
-    setOffDayLabel,
+    setOffDayLabelsByMonth,
     setStartChild,
     setExtraOffDaysText,
     setManualOverrides,
@@ -330,7 +350,7 @@ export function applyAppStatePayload(
   void setUiTheme
   void setDarkMode
   setSettingsPanelOpen(p.settingsPanelOpen)
-  setOffDayLabel((p.offDayLabel ?? DEFAULT_OFFDAY_LABEL).trim() || DEFAULT_OFFDAY_LABEL)
+  setOffDayLabelsByMonth(parseOffDayLabelsByMonth(p.offDayLabelsByMonth))
   persistHeaderToLocalStorage(p.headerImage)
   setStartChild(mergedStart[p.monthValue] ?? mergedStart['2026-02'] ?? 'Petrilla Ádám')
   setExtraOffDaysText(p.monthOffDaysByMonth[p.monthValue] ?? '')
@@ -348,7 +368,7 @@ export function buildAppStatePayload(s: {
   uiTheme: 'elegant' | 'pastel' | 'minimal'
   darkMode: boolean
   settingsPanelOpen: boolean
-  offDayLabel: string
+  offDayLabelsByMonth: Record<string, Record<string, string>>
 }): AppStatePayload {
   return {
     schemaVersion: APP_STATE_SCHEMA_VERSION,
@@ -362,7 +382,7 @@ export function buildAppStatePayload(s: {
     uiTheme: s.uiTheme,
     darkMode: s.darkMode,
     settingsPanelOpen: s.settingsPanelOpen,
-    offDayLabel: s.offDayLabel.trim() || DEFAULT_OFFDAY_LABEL,
+    offDayLabelsByMonth: { ...s.offDayLabelsByMonth },
   }
 }
 

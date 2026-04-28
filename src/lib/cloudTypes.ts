@@ -21,7 +21,7 @@ export type AppStatePayload = {
   uiTheme: 'elegant' | 'pastel' | 'minimal'
   darkMode: boolean
   settingsPanelOpen: boolean
-  offDayLabel?: string
+  offDayLabelsByMonth?: Record<string, Record<string, string>>
 }
 
 export type CloudLoadResult = {

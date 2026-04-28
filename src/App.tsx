@@ -65,9 +65,9 @@ const LAST_MONTH_STORAGE_KEY = 'fruit-calendar-last-month'
 const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
-const OFFDAY_LABEL_STORAGE_KEY = 'fruit-calendar-offday-label'
+const OFFDAY_LABELS_STORAGE_KEY = 'fruit-calendar-offday-labels-by-month'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
-const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli munkanap'
+const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli nap'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
 const APP_CHANNEL = __APP_CHANNEL__
@@ -297,9 +297,31 @@ function App() {
     }
     return stored === 'true'
   })
-  const [offDayLabel, setOffDayLabel] = useState(() => {
-    const stored = localStorage.getItem(OFFDAY_LABEL_STORAGE_KEY)
-    return stored?.trim() ? stored : DEFAULT_OFFDAY_LABEL
+  const [offDayLabelsByMonth, setOffDayLabelsByMonth] = useState<Record<string, Record<string, string>>>(() => {
+    try {
+      const stored = localStorage.getItem(OFFDAY_LABELS_STORAGE_KEY)
+      if (!stored) {
+        return {}
+      }
+      const parsed = JSON.parse(stored) as Record<string, unknown>
+      if (!parsed || typeof parsed !== 'object') {
+        return {}
+      }
+      return Object.fromEntries(
+        Object.entries(parsed).map(([month, value]) => [
+          month,
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? Object.fromEntries(
+                Object.entries(value).filter(
+                  (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+                ),
+              )
+            : {},
+        ]),
+      )
+    } catch {
+      return {}
+    }
   })
   const [cloudStatus, setCloudStatus] = useState<'off' | 'loading' | 'ok' | 'err'>(() => {
     return CLOUD_SYNC ? 'loading' : 'off'
@@ -342,6 +364,7 @@ function App() {
   const [swapPanelOpen, setSwapPanelOpen] = useState(true)
   const [childFilterPanelOpen, setChildFilterPanelOpen] = useState(true)
   const [editingOffDayLabelCellKey, setEditingOffDayLabelCellKey] = useState<string | null>(null)
+  const [editingOffDayLabelValue, setEditingOffDayLabelValue] = useState(DEFAULT_OFFDAY_LABEL)
   const cloudBootstrapStarted = useRef(false)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
@@ -414,7 +437,7 @@ function App() {
             setUiTheme,
             setDarkMode,
             setSettingsPanelOpen,
-            setOffDayLabel,
+            setOffDayLabelsByMonth,
             setStartChild,
             setExtraOffDaysText,
             setManualOverrides: () => {},
@@ -449,7 +472,7 @@ function App() {
       uiTheme,
       darkMode,
       settingsPanelOpen,
-      offDayLabel,
+      offDayLabelsByMonth,
     })
     const timer = setTimeout(() => {
       void saveGroupState(payload, { accessToken: gatewayAccessToken, role: userRole })
@@ -471,7 +494,7 @@ function App() {
     uiTheme,
     darkMode,
     settingsPanelOpen,
-    offDayLabel,
+    offDayLabelsByMonth,
     canSaveToCloud,
     isAuthenticated,
     gatewayAccessToken,
@@ -561,9 +584,8 @@ function App() {
   }, [settingsPanelOpen])
 
   useEffect(() => {
-    const normalized = offDayLabel.trim()
-    localStorage.setItem(OFFDAY_LABEL_STORAGE_KEY, normalized || DEFAULT_OFFDAY_LABEL)
-  }, [offDayLabel])
+    localStorage.setItem(OFFDAY_LABELS_STORAGE_KEY, JSON.stringify(offDayLabelsByMonth))
+  }, [offDayLabelsByMonth])
 
   useEffect(() => {
     if (!editingOffDayLabelCellKey) {
@@ -603,6 +625,7 @@ function App() {
     [year, monthIndex, extraOffDays],
   )
   const manualOverrides = useMemo(() => manualOverridesByMonth[monthValue] ?? {}, [manualOverridesByMonth, monthValue])
+  const offDayLabelsForMonth = useMemo(() => offDayLabelsByMonth[monthValue] ?? {}, [offDayLabelsByMonth, monthValue])
   const excludedChildren = useMemo(() => excludedChildrenByMonth[monthValue] ?? [], [excludedChildrenByMonth, monthValue])
   const filteredChild = useMemo(() => {
     const normalized = childFilter.trim().toLowerCase()
@@ -656,18 +679,18 @@ function App() {
       weekdays,
       weeks,
       offDayDateKeys: new Set(extraOffDayList),
-      offDayLabel,
+      offDayLabelsByDateKey: offDayLabelsForMonth,
       headerImage,
       displayYear: year,
       displayMonthIndex: monthIndex,
     })
-  }, [exportTitle, weeks, extraOffDayList, offDayLabel, headerImage, year, monthIndex])
+  }, [exportTitle, weeks, extraOffDayList, offDayLabelsForMonth, headerImage, year, monthIndex])
   const printPreviewFrameHtml = useMemo(() => {
     return buildResponsivePreviewHtml(printPreviewHtml)
   }, [printPreviewHtml])
   const printPreviewFrameKey = useMemo(() => {
-    return `${monthValue}:${extraOffDaysText}:${offDayLabel}:${JSON.stringify(manualOverrides)}:${printPreviewHtml.length}`
-  }, [monthValue, extraOffDaysText, offDayLabel, manualOverrides, printPreviewHtml])
+    return `${monthValue}:${extraOffDaysText}:${JSON.stringify(offDayLabelsForMonth)}:${JSON.stringify(manualOverrides)}:${printPreviewHtml.length}`
+  }, [monthValue, extraOffDaysText, offDayLabelsForMonth, manualOverrides, printPreviewHtml])
   const currentPayload = useMemo(
     () =>
       buildAppStatePayload({
@@ -681,7 +704,7 @@ function App() {
         uiTheme,
         darkMode,
         settingsPanelOpen,
-        offDayLabel,
+        offDayLabelsByMonth,
       }),
     [
       childrenText,
@@ -694,7 +717,7 @@ function App() {
       uiTheme,
       darkMode,
       settingsPanelOpen,
-      offDayLabel,
+      offDayLabelsByMonth,
     ],
   )
   const currentPayloadSignature = useMemo(() => JSON.stringify(currentPayload), [currentPayload])
@@ -1046,6 +1069,19 @@ function App() {
       })
       return next
     })
+    setOffDayLabelsByMonth((prev) => {
+      const next = { ...prev }
+      touchedMonths.forEach((monthKey) => {
+        const current = { ...(next[monthKey] ?? {}) }
+        normalizedKeys.forEach((dateKey) => {
+          if (dateKey.startsWith(monthKey)) {
+            delete current[dateKey]
+          }
+        })
+        next[monthKey] = current
+      })
+      return next
+    })
   }
 
   const removeExtraOffDays = (dateKeys: string[]): void => {
@@ -1137,15 +1173,36 @@ function App() {
     setOffDayDragMode(null)
   }
 
+  const getOffDayLabel = (dateKey: string): string => {
+    const custom = offDayLabelsForMonth[dateKey]
+    return custom?.trim() || DEFAULT_OFFDAY_LABEL
+  }
+
   const startEditingOffDayLabel = (dateKey: string): void => {
     if (!canEdit) {
       return
     }
     setEditingOffDayLabelCellKey(dateKey)
+    setEditingOffDayLabelValue(getOffDayLabel(dateKey))
   }
 
   const commitOffDayLabelEdit = (): void => {
-    setOffDayLabel((prev) => prev.trim() || DEFAULT_OFFDAY_LABEL)
+    if (!editingOffDayLabelCellKey) {
+      return
+    }
+    const normalized = editingOffDayLabelValue.trim()
+    setOffDayLabelsByMonth((prev) => {
+      const currentMonth = { ...(prev[monthValue] ?? {}) }
+      if (!normalized || normalized === DEFAULT_OFFDAY_LABEL) {
+        delete currentMonth[editingOffDayLabelCellKey]
+      } else {
+        currentMonth[editingOffDayLabelCellKey] = normalized
+      }
+      return {
+        ...prev,
+        [monthValue]: currentMonth,
+      }
+    })
     setEditingOffDayLabelCellKey(null)
   }
 
@@ -1406,7 +1463,7 @@ function App() {
           setUiTheme,
           setDarkMode,
           setSettingsPanelOpen,
-          setOffDayLabel,
+          setOffDayLabelsByMonth,
           setStartChild,
           setExtraOffDaysText,
           setManualOverrides: () => {},
@@ -1945,8 +2002,8 @@ function App() {
                                       ref={offDayLabelInputRef}
                                       type="text"
                                       className="offday-label"
-                                      value={offDayLabel}
-                                      onChange={(e) => setOffDayLabel(e.target.value)}
+                                      value={editingOffDayLabelValue}
+                                      onChange={(e) => setEditingOffDayLabelValue(e.target.value)}
                                       onBlur={commitOffDayLabelEdit}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
@@ -1969,7 +2026,7 @@ function App() {
                                       }}
                                       title="Felirat szerkesztése"
                                     >
-                                      {offDayLabel || DEFAULT_OFFDAY_LABEL}
+                                      {getOffDayLabel(item.dateKey)}
                                     </button>
                                   )
                                 ) : null}
@@ -1981,7 +2038,7 @@ function App() {
                               <div>{item.child}</div>
                             ) : (
                               <div className={`offday-cell offday-cell-readonly ${isImportedHolidayGap ? 'holiday-gap-cell' : ''}`}>
-                                {isOffDay ? <span className="offday-label">{offDayLabel || DEFAULT_OFFDAY_LABEL}</span> : null}
+                                {isOffDay ? <span className="offday-label">{getOffDayLabel(item.dateKey)}</span> : null}
                                 {isImportedHolidayGap ? <span className="offday-label">Munkaszüneti nap</span> : null}
                               </div>
                             )
@@ -2101,6 +2158,9 @@ function weekLabel(
 
   const rangeStart = daysInShownMonth[0]
   const rangeEnd = daysInShownMonth[daysInShownMonth.length - 1]
+  if (rangeStart.getDate() === rangeEnd.getDate()) {
+    return `${monthNameHu(rangeStart)} ${rangeStart.getDate()}.`
+  }
   return `${monthNameHu(rangeStart)} ${rangeStart.getDate()}-${rangeEnd.getDate()}.`
 }
 
@@ -2154,12 +2214,12 @@ function buildPdfHtml(params: {
   weekdays: string[]
   weeks: ReturnType<typeof chunkByWeek>
   offDayDateKeys: Set<string>
-  offDayLabel: string
+  offDayLabelsByDateKey: Record<string, string>
   headerImage: HeaderImageState | null
   displayYear: number
   displayMonthIndex: number
 }): string {
-  const { title, weekdays, weeks, offDayDateKeys, offDayLabel, headerImage, displayYear, displayMonthIndex } = params
+  const { title, weekdays, weeks, offDayDateKeys, offDayLabelsByDateKey, headerImage, displayYear, displayMonthIndex } = params
   const headColumns = weekdays
     .map(
       (day) =>
@@ -2197,7 +2257,7 @@ function buildPdfHtml(params: {
           const content = item
             ? isOffDay
               ? `<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#6f7c72;opacity:0.85;">${escapeHtml(
-                  offDayLabel || DEFAULT_OFFDAY_LABEL,
+                  offDayLabelsByDateKey[item.dateKey]?.trim() || DEFAULT_OFFDAY_LABEL,
                 )}</span>`
               : isImportedHolidayGap
                 ? '<span style="display:block;font-weight:600;font-size:2.6mm;line-height:1.2;color:#5d6f89;opacity:0.88;">Munkaszüneti nap</span>'
