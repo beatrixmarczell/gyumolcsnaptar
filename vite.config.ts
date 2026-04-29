@@ -76,6 +76,23 @@ function resolveAppVersion(): string {
 
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
     version?: string
+    buildTag?: string
+  }
+
+  // Vercel checks out the repo with a shallow clone and without git tags,
+  // so `git tag --points-at HEAD` returns nothing. As a deterministic
+  // fallback, every release commit also bumps `buildTag` in package.json
+  // to the same string as the annotated git tag, and we prefer that here
+  // over the generic `git-<sha>` form so the version pill in the UI mirrors
+  // the actual GitHub release tag on the next channel deploy as well.
+  const buildTag = extractSemverTag((packageJson.buildTag ?? '').trim())
+  if (buildTag) {
+    return buildTag
+  }
+
+  const packageVersion = extractSemverTag(packageJson.version ?? '')
+  if (packageVersion) {
+    return packageVersion
   }
 
   try {
@@ -86,12 +103,7 @@ function resolveAppVersion(): string {
       return `git-${commitSha}`
     }
   } catch {
-    // Ignore and try package fallback.
-  }
-
-  const packageVersion = extractSemverTag(packageJson.version ?? '')
-  if (packageVersion) {
-    return packageVersion
+    // Ignore and fall through to the absolute default.
   }
 
   return 'v0.0.0'
