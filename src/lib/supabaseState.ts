@@ -338,23 +338,30 @@ export function applyAppStatePayload(
     setExtraOffDaysText,
     setManualOverrides,
   } = setters
-  const mergedStart: Record<string, string> = { '2026-02': 'Petrilla Ádám', ...p.startChildByMonth }
-  setChildrenText(p.childrenText)
-  setMonthValue(p.monthValue)
-  setStartChildByMonth(mergedStart)
-  setMonthOffDaysByMonth(p.monthOffDaysByMonth)
-  setManualOverridesByMonth(p.manualOverridesByMonth)
-  setExcludedChildrenByMonth(p.excludedChildrenByMonth ?? {})
-  setHeaderImage(p.headerImage)
+  const mergedStart: Record<string, string> = { '2026-02': 'Petrilla Ádám', ...(p.startChildByMonth ?? {}) }
+  if (p.childrenText !== undefined) setChildrenText(p.childrenText)
+  if (p.monthValue !== undefined) setMonthValue(p.monthValue)
+  if (p.startChildByMonth !== undefined) setStartChildByMonth(mergedStart)
+  if (p.monthOffDaysByMonth !== undefined) setMonthOffDaysByMonth(p.monthOffDaysByMonth)
+  if (p.manualOverridesByMonth !== undefined) setManualOverridesByMonth(p.manualOverridesByMonth)
+  if (p.excludedChildrenByMonth !== undefined) setExcludedChildrenByMonth(p.excludedChildrenByMonth ?? {})
+  if (p.headerImage !== undefined) setHeaderImage(p.headerImage)
   // UI theme remains device-local: do not apply cloud values.
   void setUiTheme
   void setDarkMode
-  setSettingsPanelOpen(p.settingsPanelOpen)
-  setOffDayLabelsByMonth(parseOffDayLabelsByMonth(p.offDayLabelsByMonth))
-  persistHeaderToLocalStorage(p.headerImage)
-  setStartChild(mergedStart[p.monthValue] ?? mergedStart['2026-02'] ?? 'Petrilla Ádám')
-  setExtraOffDaysText(p.monthOffDaysByMonth[p.monthValue] ?? '')
-  setManualOverrides(p.manualOverridesByMonth[p.monthValue] ?? {})
+  if (p.settingsPanelOpen !== undefined) setSettingsPanelOpen(p.settingsPanelOpen)
+  if (p.offDayLabelsByMonth !== undefined) setOffDayLabelsByMonth(parseOffDayLabelsByMonth(p.offDayLabelsByMonth))
+  if (p.headerImage !== undefined) persistHeaderToLocalStorage(p.headerImage)
+  const monthKey = p.monthValue
+  if (monthKey !== undefined) {
+    setStartChild(mergedStart[monthKey] ?? mergedStart['2026-02'] ?? 'Petrilla Ádám')
+    if (p.monthOffDaysByMonth !== undefined) {
+      setExtraOffDaysText(p.monthOffDaysByMonth[monthKey] ?? '')
+    }
+    if (p.manualOverridesByMonth !== undefined) {
+      setManualOverrides(p.manualOverridesByMonth[monthKey] ?? {})
+    }
+  }
 }
 
 export function buildAppStatePayload(s: {

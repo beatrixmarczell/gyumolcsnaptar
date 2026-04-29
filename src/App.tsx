@@ -1360,7 +1360,20 @@ function App() {
     setSwapBusy(true)
     setSwapError(null)
     try {
-      await approveSwapOffer({ accessToken: gatewayAccessToken, requestId, offerId })
+      const approveResult = await approveSwapOffer({ accessToken: gatewayAccessToken, requestId, offerId })
+      // A swap RPC a frissített csoport payload-ot (benne a manualOverridesByMonth-szal) is visszaadja.
+      // A `CLOUD_SYNC` flag-től függetlenül itt frissítjük a táblázat állapotát, hogy a két név
+      // a UI-ban is azonnal lecserélődjön.
+      const swappedOverrides = approveResult.payload?.manualOverridesByMonth
+      if (swappedOverrides && typeof swappedOverrides === 'object') {
+        setManualOverridesByMonth((prev) => {
+          const next = { ...prev }
+          for (const [monthKey, monthOverrides] of Object.entries(swappedOverrides)) {
+            next[monthKey] = { ...(prev[monthKey] ?? {}), ...monthOverrides }
+          }
+          return next
+        })
+      }
       await refreshSwapRequests()
       if (CLOUD_SYNC) {
         setCloudStatus('loading')

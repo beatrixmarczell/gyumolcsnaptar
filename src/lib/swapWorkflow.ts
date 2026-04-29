@@ -1,5 +1,5 @@
 import { getDefaultGroupId, getDesktopAccessToken, getFunctionUrl } from './supabaseClient'
-import type { AppUserRole } from './cloudTypes'
+import type { AppStatePayload, AppUserRole } from './cloudTypes'
 
 export type SwapOffer = {
   id: string
@@ -129,13 +129,14 @@ export async function approveSwapOffer(params: {
   accessToken?: string | null
   requestId: string
   offerId: string
-}): Promise<void> {
+}): Promise<{ payload: AppStatePayload | null }> {
   const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  const json = await callGateway<{ ok?: boolean; payload?: AppStatePayload | null }>(token, {
     action: 'swap_request_approve',
     requestId: params.requestId,
     offerId: params.offerId,
   })
+  return { payload: json.payload ?? null }
 }
 
 export async function deleteSwapRequest(params: { accessToken?: string | null; requestId: string }): Promise<void> {
