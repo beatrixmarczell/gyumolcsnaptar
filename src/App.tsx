@@ -1946,33 +1946,41 @@ function App() {
                 <h2>Cserek</h2>
                 <div className="swap-request-create-card">
                   <p className="swap-request-create-title">Csere igénylés:</p>
-                  <p className="compact-note">
-                    A választható napok a táblázat aktuális hónapjától a rákövetkező két hónapra esnek (ugyanúgy, mint a gyerekszűrőnél); a listában a naphoz tartozó kiosztott gyerek is látszik.
-                  </p>
-                  <div className="swap-admin-actions">
-                    <label>
-                      Kérés dátuma
-                      <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
-                        <option value="">-- Válassz dátumot --</option>
-                        {swapNewRequestDateKeys.map((key) => {
-                          const child = swapThreeMonthChildByDateKey.get(key)?.trim()
-                          return (
-                            <option key={`request-date-${key}`} value={key}>
-                              {child ? `${key} — ${child}` : key}
-                            </option>
-                          )
-                        })}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      className="action-button swap-primary-action"
-                      disabled={swapBusy || !swapRequestDateKey}
-                      onClick={() => void handleCreateSwapRequest()}
-                    >
-                      Csere kérés indítása
-                    </button>
-                  </div>
+                  {swapNewRequestDateKeys.length === 0 && swapLinkedMonthDateKeys.length > 0 ? (
+                    <p className="swap-no-offer-dates-hint">
+                      Minden elérhető napodra van már nyitott kérés — addig nem indíthatsz új igénylést. Vonj vissza egy meglévő kérést, vagy adj ajánlatot egy másik szülő kérésére.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="compact-note">
+                        A választható napok a táblázat aktuális hónapjától a rákövetkező két hónapra esnek (ugyanúgy, mint a gyerekszűrőnél); a listában a naphoz tartozó kiosztott gyerek is látszik.
+                      </p>
+                      <div className="swap-admin-actions">
+                        <label>
+                          Kérés dátuma
+                          <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
+                            <option value="">-- Válassz dátumot --</option>
+                            {swapNewRequestDateKeys.map((key) => {
+                              const child = swapThreeMonthChildByDateKey.get(key)?.trim()
+                              return (
+                                <option key={`request-date-${key}`} value={key}>
+                                  {child ? `${key} — ${child}` : key}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          className="action-button swap-primary-action"
+                          disabled={swapBusy || !swapRequestDateKey}
+                          onClick={() => void handleCreateSwapRequest()}
+                        >
+                          Csere kérés indítása
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
                 {swapError ? <p className="cloud-pill cloud-pill--err">{swapError}</p> : null}
                 {swapLoading ? <p className="compact-note">Swap lista betöltése…</p> : null}
