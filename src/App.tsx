@@ -1965,9 +1965,6 @@ function App() {
                     </p>
                   ) : (
                     <>
-                      <p className="compact-note">
-                        A választható napok a táblázat aktuális hónapjától a rákövetkező két hónapra esnek (ugyanúgy, mint a gyerekszűrőnél); a listában a naphoz tartozó kiosztott gyerek is látszik.
-                      </p>
                       <div className="swap-admin-actions">
                         <label>
                           Kérés dátuma
