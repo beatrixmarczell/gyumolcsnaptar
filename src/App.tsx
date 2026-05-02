@@ -936,10 +936,23 @@ function App() {
     return s
   }, [swapRequests, userProfileId])
 
-  /** Új kérés: olyan napok, ahol még nincs csoportszintű nyitott kérelem erre a dátumra. */
+  /** Saját pending ajánlatok dátumai — ezekre nem lehet új kérést indítani sem. */
+  const myPendingOfferDateKeys = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of swapRequests) {
+      for (const o of r.offers) {
+        if (o.offer_user_id === userProfileId && o.status === 'pending') {
+          s.add(o.offer_date_key)
+        }
+      }
+    }
+    return s
+  }, [swapRequests, userProfileId])
+
+  /** Új kérés: olyan napok, ahol még nincs csoportszintű nyitott kérelem és a user sem adott rá pending ajánlatot. */
   const swapNewRequestDateKeys = useMemo(
-    () => swapLinkedMonthDateKeys.filter((k) => !activeSwapRequestDateKeys.has(k)),
-    [swapLinkedMonthDateKeys, activeSwapRequestDateKeys],
+    () => swapLinkedMonthDateKeys.filter((k) => !activeSwapRequestDateKeys.has(k) && !myPendingOfferDateKeys.has(k)),
+    [swapLinkedMonthDateKeys, activeSwapRequestDateKeys, myPendingOfferDateKeys],
   )
 
   useEffect(() => {
