@@ -28,6 +28,7 @@ import {
   type SwapRequest,
 } from './lib/swapWorkflow'
 import { inferEditorLinkedChildrenFromTokens } from './lib/editorChildInference'
+import { resolveDemoParentLinkedChild } from './lib/demoParentChildMap'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -835,6 +836,10 @@ function App() {
     }
     if (linkedChildren.length > 0) {
       return linkedChildren
+    }
+    const demoChild = resolveDemoParentLinkedChild(userPreferredUsername, userEmail)
+    if (demoChild) {
+      return [demoChild]
     }
     return inferEditorLinkedChildrenFromTokens(
       userDisplayName,
@@ -1954,7 +1959,9 @@ function App() {
                           disabled={swapBusy || request.status !== 'requested'}
                         >
                           <option value="">-- Válassz dátumot --</option>
-                          {swapLinkedMonthDateKeys.map((key) => {
+                          {swapLinkedMonthDateKeys
+                            .filter((key) => key !== request.requester_date_key)
+                            .map((key) => {
                             const child = swapThreeMonthChildByDateKey.get(key)?.trim()
                             return (
                               <option key={`offer-date-${request.id}-${key}`} value={key}>

@@ -358,6 +358,32 @@ function inferEditorChildrenFromIdentity(
   return [...out]
 }
 
+const DEMO_PARENT_USERNAME_CHILD: Record<string, string> = {
+  'szulo1.demo': 'Marczell Zsombor Dániel',
+  'szulo2.demo': 'Baló Olívia',
+  'szulo3.demo': 'Burik Bendegúz',
+  'szulo4.demo': 'Czakó Adél Luca',
+}
+const DEMO_PARENT_EMAIL_CHILD: Record<string, string> = {
+  'szulo1@example.com': 'Marczell Zsombor Dániel',
+  'szulo2@example.com': 'Baló Olívia',
+  'szulo3@example.com': 'Burik Bendegúz',
+  'szulo4@example.com': 'Czakó Adél Luca',
+}
+
+/** Keycloak demó szülők: „Szülő 2” név nem tartalmazza a gyerek nevét — fix kulcs username/email alapján. */
+function demoLinkedChildForIdentity(preferredUsername: string | null, email: string | null): string | null {
+  const u = preferredUsername?.trim().toLowerCase().replace(/_/g, '.')
+  if (u && DEMO_PARENT_USERNAME_CHILD[u]) {
+    return DEMO_PARENT_USERNAME_CHILD[u]
+  }
+  const e = email?.trim().toLowerCase()
+  if (e && DEMO_PARENT_EMAIL_CHILD[e]) {
+    return DEMO_PARENT_EMAIL_CHILD[e]
+  }
+  return null
+}
+
 /** A `resolveMembership` upsert eltérő PK-t adhat, mint a seedelt `parent_child_links`; ugyanarra az e-mailre lévő profilokat egyesítjük. */
 async function collectProfileIdsForParentLinks(userId: string, email: string | null): Promise<string[]> {
   const ids = new Set<string>([userId])
@@ -454,6 +480,11 @@ async function ensureChildLinked(
       return
     }
     if (editorChildMatchesIdentityTokens(trimmed, identity.displayName, identity.preferredUsername, identity.email)) {
+      await allowPersist()
+      return
+    }
+    const demoExpect = demoLinkedChildForIdentity(identity.preferredUsername, identity.email)
+    if (demoExpect && trimmed === demoExpect) {
       await allowPersist()
       return
     }
@@ -566,6 +597,11 @@ Deno.serve(async (req) => {
         )
         if (inferred.length > 0) {
           linkedChildren = inferred
+        } else {
+          const demo = demoLinkedChildForIdentity(identity.preferredUsername, identity.email)
+          if (demo) {
+            linkedChildren = [demo]
+          }
         }
       }
       return json(200, {
