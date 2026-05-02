@@ -1944,6 +1944,7 @@ function App() {
                         </button>
                       </div>
                     )}
+                    {request.requester_user_id !== userProfileId && (
                     <div
                       className={
                         request.status === 'requested' ? 'swap-admin-actions' : 'swap-admin-actions swap-inactive-block'
@@ -1980,6 +1981,7 @@ function App() {
                         Ajánlat küldése
                       </button>
                     </div>
+                    )}
                     <ul className="swap-offer-list">
                       {request.offers
                         // A visszavont ajánlat ne maradjon kint értesítésként.
