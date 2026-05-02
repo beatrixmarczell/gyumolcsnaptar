@@ -2221,7 +2221,7 @@ function App() {
             </div>
             {canEdit ? (
               <p className="compact-note calendar-offday-hint">
-                Tipp: jobb felső +/− ikonnal egy napot állítasz szünnappá; Shift + kattintásnál intervallumot vált.
+                Tipp: jobb felső +/− ikonnal egy napot állítasz szünnappá; Shift + kattintásnál intervallumot vált; az egeret húzva több napot is ki tudsz jelölni.
               </p>
             ) : null}
             <table>
