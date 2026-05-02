@@ -1,8 +1,8 @@
 {
   "name": "gyumolcsnaptar",
   "private": true,
-  "version": "3.0.31",
-  "buildTag": "v3.0.31-swap-no-offer-if-all-dates-taken",
+  "version": "3.0.32",
+  "buildTag": "v3.0.32-swap-consistent-month-start-child",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

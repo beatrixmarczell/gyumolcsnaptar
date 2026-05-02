@@ -788,6 +788,63 @@ function App() {
     () => (showClosedSwapRequests ? swapRequests : swapRequests.filter((request) => request.status === 'requested')),
     [showClosedSwapRequests, swapRequests],
   )
+
+  /**
+   * Egy adott hónaphoz (YYYY-MM) meghatározza a helyes kezdő gyereket az alábbi prioritással:
+   *  1. Explicit startChildByMonth[monthValue] – ha van
+   *  2. A legközelebbi korábbi hónaptól láncolt nextStartChild számítás
+   *  3. Ha nincs korábbi ismert pont, visszatér a globális startChild-dal
+   * Így minden hónap — függetlenül attól, hogy az aktuális ablakban slot 0, 1 vagy 2 — ugyanazt
+   * a kiosztást kapja (a swap kérések dátuma konzisztens marad navigáció után is).
+   */
+  const resolveStartChildForMonth = useCallback(
+    (targetMonthValue: string): string => {
+      if (startChildByMonth[targetMonthValue]) {
+        return startChildByMonth[targetMonthValue]
+      }
+      const [tyStr, tmStr] = targetMonthValue.split('-')
+      const targetY = Number(tyStr)
+      const targetM = Number(tmStr)
+      let baseY = targetY
+      let baseM = targetM - 1
+      if (baseM <= 0) { baseM += 12; baseY-- }
+      let baseStartChild: string | null = null
+      let baseMonthValue: string | null = null
+      for (let i = 0; i < 36; i++) {
+        const mv = `${baseY}-${String(baseM).padStart(2, '0')}`
+        if (startChildByMonth[mv]) {
+          baseStartChild = startChildByMonth[mv]
+          baseMonthValue = mv
+          break
+        }
+        baseM--
+        if (baseM <= 0) { baseM += 12; baseY-- }
+      }
+      if (!baseMonthValue || !baseStartChild) {
+        return startChild
+      }
+      let rolling = baseStartChild
+      let [chainY, chainM] = baseMonthValue.split('-').map(Number)
+      chainM++
+      if (chainM > 12) { chainM = 1; chainY++ }
+      while (`${chainY}-${String(chainM).padStart(2, '0')}` !== targetMonthValue) {
+        const mv = `${chainY}-${String(chainM).padStart(2, '0')}`
+        const explicit = startChildByMonth[mv]
+        const chainStart = explicit ?? rolling
+        const offDays = new Set(parseDateKeys(monthOffDaysByMonth[mv] ?? ''))
+        const wDays = getMonthWorkingDays(chainY, chainM - 1, offDays)
+        const overrides = manualOverridesByMonth[mv] ?? {}
+        const res = generateAssignments({ children, monthWorkingDays: wDays, startChild: chainStart, manualOverrides: overrides, excludedChildren: [] })
+        rolling = res.nextStartChild || chainStart
+        chainM++
+        if (chainM > 12) { chainM = 1; chainY++ }
+        if (chainY * 12 + chainM > targetY * 12 + targetM + 1) break
+      }
+      return rolling
+    },
+    [startChildByMonth, startChild, monthOffDaysByMonth, manualOverridesByMonth, children],
+  )
+
   const swapThreeMonthChildByDateKey = useMemo(() => {
     const map = new Map<string, string>()
     const monthSlots = [0, 1, 2].map((offset) => {
@@ -798,14 +855,14 @@ function App() {
     if (children.length === 0) {
       return map
     }
-    let rollingStartChild = startChild
+    let rollingStartChild = resolveStartChildForMonth(monthSlots[0].monthValue)
     for (let idx = 0; idx < monthSlots.length; idx += 1) {
       const slot = monthSlots[idx]
       const slotOverrides = manualOverridesByMonth[slot.monthValue] ?? {}
       const slotOffDays = new Set(parseDateKeys(monthOffDaysByMonth[slot.monthValue] ?? ''))
       const slotWorkingDays = getMonthWorkingDays(slot.year, slot.monthIndex, slotOffDays)
       const explicitStart = startChildByMonth[slot.monthValue]
-      const slotStartChild = idx === 0 ? startChild : explicitStart ?? rollingStartChild ?? children[0] ?? ''
+      const slotStartChild = idx === 0 ? resolveStartChildForMonth(slot.monthValue) : explicitStart ?? rollingStartChild ?? children[0] ?? ''
       const slotResult = generateAssignments({
         children,
         monthWorkingDays: slotWorkingDays,
@@ -819,7 +876,7 @@ function App() {
       }
     }
     return map
-  }, [children, year, monthIndex, manualOverridesByMonth, monthOffDaysByMonth, startChildByMonth, startChild])
+  }, [children, year, monthIndex, manualOverridesByMonth, monthOffDaysByMonth, startChildByMonth, startChild, resolveStartChildForMonth])
   const swapWindowDateKeys = useMemo(
     () => [...swapThreeMonthChildByDateKey.keys()].sort(),
     [swapThreeMonthChildByDateKey],
@@ -908,65 +965,6 @@ function App() {
       return changed ? next : prev
     })
   }, [swapLinkedMonthDateKeys])
-  /**
-   * Egy adott hónaphoz (YYYY-MM) meghatározza a helyes kezdő gyereket az alábbi prioritással:
-   *  1. Explicit startChildByMonth[monthValue] – ha van
-   *  2. A legközelebbi korábbi hónaptól láncolt nextStartChild számítás
-   *  3. Ha nincs korábbi ismert pont, a globális startChild (az aktuális hónaphoz tartozik)
-   * Így a 3-hónapos ablakon kívüli (pl. múltbeli) dátumok is helyesen jelennek meg.
-   */
-  const resolveStartChildForMonth = useCallback(
-    (targetMonthValue: string): string => {
-      if (startChildByMonth[targetMonthValue]) {
-        return startChildByMonth[targetMonthValue]
-      }
-      const [tyStr, tmStr] = targetMonthValue.split('-')
-      const targetY = Number(tyStr)
-      const targetM = Number(tmStr)
-      // Keresünk egy közeli ismert kiindulópontot visszafelé (max 36 hónap)
-      let baseY = targetY
-      let baseM = targetM - 1
-      if (baseM <= 0) { baseM += 12; baseY-- }
-      let baseStartChild: string | null = null
-      let baseMonthValue: string | null = null
-      for (let i = 0; i < 36; i++) {
-        const mv = `${baseY}-${String(baseM).padStart(2, '0')}`
-        if (startChildByMonth[mv]) {
-          baseStartChild = startChildByMonth[mv]
-          baseMonthValue = mv
-          break
-        }
-        baseM--
-        if (baseM <= 0) { baseM += 12; baseY-- }
-      }
-      if (!baseMonthValue || !baseStartChild) {
-        // Nincs korábbi ismert pont; a startChild az aktuális hónaphoz tartozik,
-        // onnan láncoljuk előre (ha célhónap > aktuális) vagy visszatérünk
-        return startChild
-      }
-      // Láncolás baseMonthValue+1 → targetMonthValue-ig
-      let rolling = baseStartChild
-      let [chainY, chainM] = baseMonthValue.split('-').map(Number)
-      chainM++
-      if (chainM > 12) { chainM = 1; chainY++ }
-      while (`${chainY}-${String(chainM).padStart(2, '0')}` !== targetMonthValue) {
-        const mv = `${chainY}-${String(chainM).padStart(2, '0')}`
-        const explicit = startChildByMonth[mv]
-        const chainStart = explicit ?? rolling
-        const offDays = new Set(parseDateKeys(monthOffDaysByMonth[mv] ?? ''))
-        const wDays = getMonthWorkingDays(chainY, chainM - 1, offDays)
-        const overrides = manualOverridesByMonth[mv] ?? {}
-        const res = generateAssignments({ children, monthWorkingDays: wDays, startChild: chainStart, manualOverrides: overrides, excludedChildren: [] })
-        rolling = res.nextStartChild || chainStart
-        chainM++
-        if (chainM > 12) { chainM = 1; chainY++ }
-        // biztonsági korlát: max 60 hónap láncolás
-        if (chainY * 12 + chainM > targetY * 12 + targetM + 1) break
-      }
-      return rolling
-    },
-    [startChildByMonth, startChild, monthOffDaysByMonth, manualOverridesByMonth, children],
-  )
 
   /** A naptár aktuális állapota dátum kulcsonként (ajánlat-ellenőrzéshez és offer megjelenítéshez). */
   const currentChildNameByDateKey = useMemo(() => {
