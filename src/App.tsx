@@ -868,6 +868,17 @@ function App() {
     return s
   }, [swapRequests])
 
+  /** Saját nyitott kérések dátumainak halmaza – ezekre nem adhat ajánlatot a user. */
+  const myOpenRequestDateKeys = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of swapRequests) {
+      if (r.status === 'requested' && r.requester_user_id === userProfileId) {
+        s.add(r.requester_date_key)
+      }
+    }
+    return s
+  }, [swapRequests, userProfileId])
+
   /** Új kérés: olyan napok, ahol még nincs csoportszintű nyitott kérelem erre a dátumra. */
   const swapNewRequestDateKeys = useMemo(
     () => swapLinkedMonthDateKeys.filter((k) => !activeSwapRequestDateKeys.has(k)),
@@ -2006,7 +2017,18 @@ function App() {
                       </div>
                     ) : null}
                     {request.requester_user_id !== userProfileId &&
-                    !request.offers.some((o) => o.offer_user_id === userProfileId && o.status === 'pending') && (
+                    !request.offers.some((o) => o.offer_user_id === userProfileId && o.status === 'pending') && (() => {
+                      const availableOfferDates = swapLinkedMonthDateKeys.filter(
+                        (key) => key !== request.requester_date_key && !myOpenRequestDateKeys.has(key),
+                      )
+                      if (request.status === 'requested' && availableOfferDates.length === 0) {
+                        return (
+                          <p className="swap-no-offer-dates-hint">
+                            Nincs felajánható dátuma — vonja vissza valamelyik saját kérését, hogy ajánlatot tudjon adni.
+                          </p>
+                        )
+                      }
+                      return (
                     <div
                       className={
                         request.status === 'requested' ? 'swap-admin-actions' : 'swap-admin-actions swap-inactive-block'
@@ -2022,9 +2044,7 @@ function App() {
                           disabled={swapBusy || request.status !== 'requested'}
                         >
                           <option value="">-- Válassz dátumot --</option>
-                          {swapLinkedMonthDateKeys
-                            .filter((key) => key !== request.requester_date_key)
-                            .map((key) => {
+                          {availableOfferDates.map((key) => {
                             const child = swapThreeMonthChildByDateKey.get(key)?.trim()
                             return (
                               <option key={`offer-date-${request.id}-${key}`} value={key}>
@@ -2043,7 +2063,8 @@ function App() {
                         Ajánlat küldése
                       </button>
                     </div>
-                    )}
+                      )
+                    })()}
                     <ul className="swap-offer-list">
                       {request.offers
                         // A visszavont ajánlat ne maradjon kint értesítésként.
