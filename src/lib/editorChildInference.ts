@@ -49,18 +49,3 @@ export function inferEditorLinkedChildrenFromTokens(
   }
   return [...out]
 }
-
-/** Csere jogosultság: a gyerek neve tartalmazza valamelyik ≥4 karakteres tokent (név/e-mail). */
-export function editorChildMatchesInferTokens(
-  childName: string,
-  displayName: string | null | undefined,
-  preferredUsername: string | null | undefined,
-  email: string | null | undefined,
-): boolean {
-  const tokens = collectEditorInferTokens(displayName, preferredUsername, email)
-  if (tokens.size === 0) {
-    return false
-  }
-  const childLower = childName.trim().toLowerCase()
-  return [...tokens].some((t) => childLower.includes(t))
-}
