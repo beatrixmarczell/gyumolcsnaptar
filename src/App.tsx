@@ -452,7 +452,10 @@ function App() {
         if (remote.linkedChildren !== undefined) {
           setLinkedChildren(remote.linkedChildren)
         }
-        if (shouldApplyCloudPayload && remote.payload) {
+        const shouldMergeRemoteCalendarIntoUi =
+          Boolean(remote.payload) &&
+          (shouldApplyCloudPayload || shouldFetchKeycloakProfile)
+        if (shouldMergeRemoteCalendarIntoUi) {
           applyAppStatePayload(remote, {
             setChildrenText,
             setMonthValue,
