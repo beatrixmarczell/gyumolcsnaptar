@@ -2038,7 +2038,7 @@ function App() {
                     {request.requester_user_id !== userProfileId &&
                     !request.offers.some((o) => o.offer_user_id === userProfileId && o.status === 'pending') && (() => {
                       const availableOfferDates = swapLinkedMonthDateKeys.filter(
-                        (key) => key !== request.requester_date_key && !myOpenRequestDateKeys.has(key),
+                        (key) => key !== request.requester_date_key && !myOpenRequestDateKeys.has(key) && !myPendingOfferDateKeys.has(key),
                       )
                       if (request.status === 'requested' && availableOfferDates.length === 0) {
                         return (
