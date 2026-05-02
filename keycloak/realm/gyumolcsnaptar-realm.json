@@ -68,6 +68,50 @@
       "lastName": "Viewer",
       "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
       "realmRoles": ["viewer"]
+    },
+    {
+      "id": "2d8f9c2e-1001-4f0a-9b2a-7c3e9f1a2b01",
+      "username": "szulo1.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "szulo1@example.com",
+      "firstName": "Teszt",
+      "lastName": "Szülő 1",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["editor"]
+    },
+    {
+      "id": "2d8f9c2e-1002-4f0a-9b2a-7c3e9f1a2b02",
+      "username": "szulo2.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "szulo2@example.com",
+      "firstName": "Teszt",
+      "lastName": "Szülő 2",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["editor"]
+    },
+    {
+      "id": "2d8f9c2e-1003-4f0a-9b2a-7c3e9f1a2b03",
+      "username": "szulo3.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "szulo3@example.com",
+      "firstName": "Teszt",
+      "lastName": "Szülő 3",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["editor"]
+    },
+    {
+      "id": "2d8f9c2e-1004-4f0a-9b2a-7c3e9f1a2b04",
+      "username": "szulo4.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "szulo4@example.com",
+      "firstName": "Teszt",
+      "lastName": "Szülő 4",
+      "credentials": [{ "type": "password", "value": "ChangeMe123!", "temporary": false }],
+      "realmRoles": ["editor"]
     }
   ]
 }

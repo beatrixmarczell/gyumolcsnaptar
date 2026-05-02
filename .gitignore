@@ -25,3 +25,6 @@ dist-ssr
 
 .vercel
 keycloak/.env
+
+# Supabase CLI helyi meta
+supabase/.temp/
