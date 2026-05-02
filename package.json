@@ -1,8 +1,8 @@
 {
   "name": "gyumolcsnaptar",
   "private": true,
-  "version": "3.0.25",
-  "buildTag": "v3.0.25-next-editor-child-infer-email-and-no-empty-roster",
+  "version": "3.0.26",
+  "buildTag": "v3.0.26-next-swap-fresh-jwt-and-persist-parent-link",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

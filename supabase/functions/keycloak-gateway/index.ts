@@ -440,10 +440,21 @@ async function ensureChildLinked(
       roster,
     )
     const trimmed = childName.trim()
+    const allowPersist = async (): Promise<void> => {
+      const { error: upErr } = await supabase.from('parent_child_links').upsert(
+        { group_id: groupId, user_id: userId, child_name: trimmed },
+        { onConflict: 'group_id,user_id,child_name' },
+      )
+      if (upErr) {
+        throw new Error(upErr.message)
+      }
+    }
     if (inferred.some((name) => name.trim() === trimmed)) {
+      await allowPersist()
       return
     }
     if (editorChildMatchesIdentityTokens(trimmed, identity.displayName, identity.preferredUsername, identity.email)) {
+      await allowPersist()
       return
     }
     throw new Error(`Nincs parent-child mapping ehhez a gyerekhez: ${childName}`)

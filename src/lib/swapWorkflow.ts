@@ -1,4 +1,5 @@
-import { getDefaultGroupId, getDesktopAccessToken, getFunctionUrl } from './supabaseClient'
+import { getDefaultGroupId, getDesktopAccessToken, getFunctionUrl, isKeycloakAuthEnabled } from './supabaseClient'
+import { getAccessToken } from './auth/keycloakAuth'
 import type { AppStatePayload, AppUserRole } from './cloudTypes'
 
 export type SwapOffer = {
@@ -39,7 +40,26 @@ export type SwapEventRow = {
   created_at: string
 }
 
-async function callGateway<T>(token: string, body: Record<string, unknown>): Promise<T> {
+async function resolveSwapBearer(passed: string | null | undefined): Promise<string> {
+  const desktop = getDesktopAccessToken()
+  if (desktop) {
+    return desktop
+  }
+  if (isKeycloakAuthEnabled()) {
+    const fresh = await getAccessToken()
+    if (fresh) {
+      return fresh
+    }
+  }
+  const t = passed?.trim()
+  if (t) {
+    return t
+  }
+  throw new Error('Hiányzó token.')
+}
+
+async function callGateway<T>(accessToken: string | null | undefined, body: Record<string, unknown>): Promise<T> {
+  const token = await resolveSwapBearer(accessToken)
   const endpoint = getFunctionUrl('keycloak-gateway')
   const groupId = getDefaultGroupId()
   if (!endpoint || !groupId) {
@@ -55,25 +75,21 @@ async function callGateway<T>(token: string, body: Record<string, unknown>): Pro
   })
   const json = (await response.json()) as T & { error?: string }
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error(
+        'A munkamenet lejárt vagy érvénytelen a token. Frissítsd az oldalt, vagy jelentkezz ki és be újra.',
+      )
+    }
     throw new Error(json.error ?? 'Swap gateway hiba.')
   }
   return json
-}
-
-function resolveToken(accessToken?: string | null): string {
-  const token = accessToken ?? getDesktopAccessToken()
-  if (!token) {
-    throw new Error('Hiányzó token.')
-  }
-  return token
 }
 
 export async function loadSwapRequests(params: { accessToken?: string | null; role: AppUserRole }): Promise<SwapRequest[]> {
   if (params.role === 'viewer') {
     return []
   }
-  const token = resolveToken(params.accessToken)
-  const json = await callGateway<{ requests?: SwapRequest[] }>(token, { action: 'swap_list' })
+  const json = await callGateway<{ requests?: SwapRequest[] }>(params.accessToken, { action: 'swap_list' })
   return json.requests ?? []
 }
 
@@ -83,8 +99,7 @@ export async function createSwapRequest(params: {
   requesterDateKey: string
   note?: string
 }): Promise<void> {
-  const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  await callGateway(params.accessToken, {
     action: 'swap_request_create',
     requesterChildName: params.requesterChildName,
     requesterDateKey: params.requesterDateKey,
@@ -99,8 +114,7 @@ export async function createSwapOffer(params: {
   offerDateKey: string
   note?: string
 }): Promise<void> {
-  const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  await callGateway(params.accessToken, {
     action: 'swap_offer_create',
     requestId: params.requestId,
     offerChildName: params.offerChildName,
@@ -110,16 +124,14 @@ export async function createSwapOffer(params: {
 }
 
 export async function withdrawSwapOffer(params: { accessToken?: string | null; offerId: string }): Promise<void> {
-  const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  await callGateway(params.accessToken, {
     action: 'swap_offer_withdraw',
     offerId: params.offerId,
   })
 }
 
 export async function withdrawSwapRequest(params: { accessToken?: string | null; requestId: string }): Promise<void> {
-  const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  await callGateway(params.accessToken, {
     action: 'swap_request_withdraw',
     requestId: params.requestId,
   })
@@ -130,8 +142,7 @@ export async function approveSwapOffer(params: {
   requestId: string
   offerId: string
 }): Promise<{ payload: AppStatePayload | null }> {
-  const token = resolveToken(params.accessToken)
-  const json = await callGateway<{ ok?: boolean; payload?: AppStatePayload | null }>(token, {
+  const json = await callGateway<{ ok?: boolean; payload?: AppStatePayload | null }>(params.accessToken, {
     action: 'swap_request_approve',
     requestId: params.requestId,
     offerId: params.offerId,
@@ -140,16 +151,14 @@ export async function approveSwapOffer(params: {
 }
 
 export async function deleteSwapRequest(params: { accessToken?: string | null; requestId: string }): Promise<void> {
-  const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  await callGateway(params.accessToken, {
     action: 'swap_request_delete',
     requestId: params.requestId,
   })
 }
 
 export async function clearClosedSwapRequests(params: { accessToken?: string | null }): Promise<void> {
-  const token = resolveToken(params.accessToken)
-  await callGateway(token, {
+  await callGateway(params.accessToken, {
     action: 'swap_requests_clear_closed',
   })
 }

@@ -13,8 +13,25 @@ import {
   isDesktopAuthEnabled,
   isKeycloakAuthEnabled,
 } from './supabaseClient'
+import { getAccessToken } from './auth/keycloakAuth'
 
 const HEADER_KEY = 'fruit-calendar-header-image'
+
+/** Keycloak JWT frissítése minden gateway hívás előtt; desktop bearer elsőbbsége. */
+async function resolveGatewayBearer(passed: string | null | undefined): Promise<string | null> {
+  const desktop = getDesktopAccessToken()
+  if (desktop) {
+    return desktop
+  }
+  if (isKeycloakAuthEnabled()) {
+    const fresh = await getAccessToken()
+    if (fresh) {
+      return fresh
+    }
+  }
+  const t = passed?.trim()
+  return t || null
+}
 
 function isHeaderImageState(v: unknown): v is HeaderImageState {
   if (!v || typeof v !== 'object') {
@@ -221,7 +238,7 @@ export async function fetchGroupState(params?: {
 }): Promise<CloudLoadResult> {
   const gatewayMode = isKeycloakAuthEnabled() || isDesktopAuthEnabled()
   if (gatewayMode) {
-    const token = params?.accessToken ?? getDesktopAccessToken()
+    const token = await resolveGatewayBearer(params?.accessToken ?? null)
     if (!token) {
       return fetchPublicReadOnlyState()
     }
@@ -257,7 +274,7 @@ export async function saveGroupState(
 ): Promise<void> {
   const gatewayMode = isKeycloakAuthEnabled() || isDesktopAuthEnabled()
   if (gatewayMode) {
-    const token = params?.accessToken ?? getDesktopAccessToken()
+    const token = await resolveGatewayBearer(params?.accessToken ?? null)
     if (!token) {
       return
     }
