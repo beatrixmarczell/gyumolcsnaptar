@@ -170,7 +170,11 @@ function labelSwapOfferStatus(s: string): string {
 
 function App() {
   const [childrenText, setChildrenText] = useState(() => {
-    return localStorage.getItem(CHILDREN_TEXT_STORAGE_KEY) ?? defaultChildren.join('\n')
+    const stored = localStorage.getItem(CHILDREN_TEXT_STORAGE_KEY)
+    if (stored != null && stored.trim().length > 0) {
+      return stored
+    }
+    return defaultChildren.join('\n')
   })
   const [monthValue, setMonthValue] = useState(() => {
     return localStorage.getItem(LAST_MONTH_STORAGE_KEY) ?? '2026-02'

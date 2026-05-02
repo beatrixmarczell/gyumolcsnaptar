@@ -274,6 +274,59 @@ function isDateKey(value: string): boolean {
   return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)
 }
 
+/** A `group_calendar_state.payload` JSON-ból névsor (szerkesztő fallbackhez). */
+function extractChildrenRosterFromPayload(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return []
+  }
+  const raw = (payload as Record<string, unknown>).childrenText
+  if (typeof raw !== 'string') {
+    return []
+  }
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
+/**
+ * Ha nincs parent_child_links sor a Keycloak userhez (más user_id mint a demó seed),
+ * a megjelenített név / felhasználónév tokenjei alapján megkeresi a gyerek(ek)et a névsorban.
+ * Csak hosszabb tokenek (>= 4), hogy „Anna” ne találjon minden Ádámot.
+ */
+function inferEditorChildrenFromIdentity(
+  displayName: string | null,
+  preferredUsername: string | null,
+  roster: string[],
+): string[] {
+  const tokens = new Set<string>()
+  const harvest = (source: string | null) => {
+    if (!source) {
+      return
+    }
+    for (const part of source.split(/[\s._-]+/)) {
+      const t = part.trim()
+      if (t.length >= 4) {
+        tokens.add(t.toLowerCase())
+      }
+    }
+  }
+  harvest(displayName)
+  harvest(preferredUsername)
+  if (tokens.size === 0 || roster.length === 0) {
+    return []
+  }
+  const out = new Set<string>()
+  for (const token of tokens) {
+    for (const child of roster) {
+      if (child.toLowerCase().includes(token)) {
+        out.add(child)
+      }
+    }
+  }
+  return [...out]
+}
+
 /** A `resolveMembership` upsert eltérő PK-t adhat, mint a seedelt `parent_child_links`; ugyanarra az e-mailre lévő profilokat egyesítjük. */
 async function collectProfileIdsForParentLinks(userId: string, email: string | null): Promise<string[]> {
   const ids = new Set<string>([userId])
@@ -325,7 +378,7 @@ async function ensureChildLinked(
   groupId: string,
   userId: string,
   childName: string,
-  identity: { email: string | null },
+  identity: { email: string | null; displayName: string | null; preferredUsername: string | null },
 ): Promise<void> {
   const profileIds = await collectProfileIdsForParentLinks(userId, identity.email)
   const { data, error } = await supabase
@@ -340,6 +393,24 @@ async function ensureChildLinked(
     throw new Error(error.message)
   }
   if (!data) {
+    const { data: stateRow, error: stateErr } = await supabase
+      .from('group_calendar_state')
+      .select('payload')
+      .eq('group_id', groupId)
+      .maybeSingle()
+    if (stateErr) {
+      throw new Error(stateErr.message)
+    }
+    const roster = extractChildrenRosterFromPayload(stateRow?.payload ?? null)
+    const inferred = inferEditorChildrenFromIdentity(
+      identity.displayName,
+      identity.preferredUsername,
+      roster,
+    )
+    const trimmed = childName.trim()
+    if (inferred.some((name) => name.trim() === trimmed)) {
+      return
+    }
     throw new Error(`Nincs parent-child mapping ehhez a gyerekhez: ${childName}`)
   }
 }
@@ -435,6 +506,21 @@ Deno.serve(async (req) => {
         const message = e instanceof Error ? e.message : 'linkedChildren lekérés sikertelen.'
         return json(500, { error: message })
       }
+      if (
+        access.role === 'editor' &&
+        Array.isArray(linkedChildren) &&
+        linkedChildren.length === 0
+      ) {
+        const roster = extractChildrenRosterFromPayload(data?.payload ?? null)
+        const inferred = inferEditorChildrenFromIdentity(
+          identity.displayName,
+          identity.preferredUsername,
+          roster,
+        )
+        if (inferred.length > 0) {
+          linkedChildren = inferred
+        }
+      }
       return json(200, {
         payload: data?.payload ?? null,
         role: access.role,
@@ -493,7 +579,11 @@ Deno.serve(async (req) => {
         return json(400, { error: 'Hiányzó vagy hibás requesterChildName / requesterDateKey.' })
       }
       if (access.role !== 'admin') {
-        await ensureChildLinked(groupId, access.userId, requesterChildName, { email: identity.email })
+        await ensureChildLinked(groupId, access.userId, requesterChildName, {
+          email: identity.email,
+          displayName: identity.displayName,
+          preferredUsername: identity.preferredUsername,
+        })
       }
       const { data: openSameDate, error: openCheckErr } = await supabase
         .from('swap_requests')
@@ -551,7 +641,11 @@ Deno.serve(async (req) => {
         return json(400, { error: 'Hiányzó vagy hibás requestId / offerChildName / offerDateKey.' })
       }
       if (access.role !== 'admin') {
-        await ensureChildLinked(groupId, access.userId, offerChildName, { email: identity.email })
+        await ensureChildLinked(groupId, access.userId, offerChildName, {
+          email: identity.email,
+          displayName: identity.displayName,
+          preferredUsername: identity.preferredUsername,
+        })
       }
       const { data: requestRow, error: requestError } = await supabase
         .from('swap_requests')
