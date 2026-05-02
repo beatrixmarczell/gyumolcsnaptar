@@ -290,15 +290,13 @@ function extractChildrenRosterFromPayload(payload: unknown): string[] {
 }
 
 /**
- * Ha nincs parent_child_links sor a Keycloak userhez (más user_id mint a demó seed),
- * a megjelenített név / felhasználónév tokenjei alapján megkeresi a gyerek(ek)et a névsorban.
- * Csak hosszabb tokenek (>= 4), hogy „Anna” ne találjon minden Ádámot.
+ * Megjelenített név, felhasználónév és e-mail lokális része (≥4 karakteres tokenek).
  */
-function inferEditorChildrenFromIdentity(
+function harvestEditorTokens(
   displayName: string | null,
   preferredUsername: string | null,
-  roster: string[],
-): string[] {
+  email: string | null,
+): Set<string> {
   const tokens = new Set<string>()
   const harvest = (source: string | null) => {
     if (!source) {
@@ -313,6 +311,39 @@ function inferEditorChildrenFromIdentity(
   }
   harvest(displayName)
   harvest(preferredUsername)
+  const raw = email?.trim()
+  if (raw) {
+    const local = raw.split('@')[0]?.split('+')[0]?.trim() ?? ''
+    harvest(local)
+  }
+  return tokens
+}
+
+function editorChildMatchesIdentityTokens(
+  childName: string,
+  displayName: string | null,
+  preferredUsername: string | null,
+  email: string | null,
+): boolean {
+  const tokens = harvestEditorTokens(displayName, preferredUsername, email)
+  if (tokens.size === 0) {
+    return false
+  }
+  const childLower = childName.trim().toLowerCase()
+  return [...tokens].some((t) => childLower.includes(t))
+}
+
+/**
+ * Ha nincs parent_child_links sor a Keycloak userhez (más user_id mint a demó seed),
+ * a tokenek alapján megkeresi a gyerek(ek)et a névsorban.
+ */
+function inferEditorChildrenFromIdentity(
+  displayName: string | null,
+  preferredUsername: string | null,
+  email: string | null,
+  roster: string[],
+): string[] {
+  const tokens = harvestEditorTokens(displayName, preferredUsername, email)
   if (tokens.size === 0 || roster.length === 0) {
     return []
   }
@@ -405,10 +436,14 @@ async function ensureChildLinked(
     const inferred = inferEditorChildrenFromIdentity(
       identity.displayName,
       identity.preferredUsername,
+      identity.email,
       roster,
     )
     const trimmed = childName.trim()
     if (inferred.some((name) => name.trim() === trimmed)) {
+      return
+    }
+    if (editorChildMatchesIdentityTokens(trimmed, identity.displayName, identity.preferredUsername, identity.email)) {
       return
     }
     throw new Error(`Nincs parent-child mapping ehhez a gyerekhez: ${childName}`)
@@ -515,6 +550,7 @@ Deno.serve(async (req) => {
         const inferred = inferEditorChildrenFromIdentity(
           identity.displayName,
           identity.preferredUsername,
+          identity.email,
           roster,
         )
         if (inferred.length > 0) {

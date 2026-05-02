@@ -8,6 +8,7 @@ export type AuthSession = {
   token: string | null
   displayName: string | null
   email: string | null
+  preferredUsername: string | null
   sub: string | null
   role: AppUserRole
 }

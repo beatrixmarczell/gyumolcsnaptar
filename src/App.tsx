@@ -27,6 +27,7 @@ import {
   withdrawSwapRequest,
   type SwapRequest,
 } from './lib/swapWorkflow'
+import { inferEditorLinkedChildrenFromTokens } from './lib/editorChildInference'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -328,6 +329,8 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!KEYCLOAK_AUTH)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userPreferredUsername, setUserPreferredUsername] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
   /** `null` = nincs szűrés (admin / még nem töltött); tömb = szerkesztő linked gyerekek. */
@@ -393,9 +396,13 @@ function App() {
       setIsAuthenticated(session.authenticated)
       setUserRole(session.role)
       setUserDisplayName(session.displayName ?? session.email)
+      setUserEmail(session.email ?? null)
+      setUserPreferredUsername(session.preferredUsername ?? null)
       if (!session.authenticated) {
         cloudBootstrapStarted.current = false
         setLinkedChildren(null)
+        setUserEmail(null)
+        setUserPreferredUsername(null)
         // Viewer mode: only show cloud "loading" when sync is actually enabled (waiting for login).
         if (CLOUD_SYNC) {
           setCloudStatus('loading')
@@ -637,6 +644,16 @@ function App() {
   }, [childrenText])
 
   useEffect(() => {
+    if (!KEYCLOAK_AUTH || !isAuthenticated || userRole !== 'editor') {
+      return
+    }
+    if (childrenText.trim().length > 0) {
+      return
+    }
+    setChildrenText(defaultChildren.join('\n'))
+  }, [KEYCLOAK_AUTH, isAuthenticated, userRole, childrenText])
+
+  useEffect(() => {
     if (children.length === 0) {
       return
     }
@@ -806,18 +823,35 @@ function App() {
     () => [...swapThreeMonthChildByDateKey.keys()].sort(),
     [swapThreeMonthChildByDateKey],
   )
-  const swapLinkedMonthDateKeys = useMemo(() => {
+  const effectiveLinkedChildren = useMemo(() => {
     if (userRole === 'admin') {
-      return swapWindowDateKeys
+      return null
+    }
+    if (userRole === 'viewer') {
+      return linkedChildren ?? []
     }
     if (linkedChildren === null) {
       return []
     }
-    const allowed = new Set(linkedChildren.map((n) => n.trim()).filter(Boolean))
+    if (linkedChildren.length > 0) {
+      return linkedChildren
+    }
+    return inferEditorLinkedChildrenFromTokens(
+      userDisplayName,
+      userPreferredUsername,
+      userEmail,
+      children,
+    )
+  }, [userRole, linkedChildren, userDisplayName, userPreferredUsername, userEmail, children])
+  const swapLinkedMonthDateKeys = useMemo(() => {
+    if (userRole === 'admin') {
+      return swapWindowDateKeys
+    }
+    const allowed = new Set((effectiveLinkedChildren ?? []).map((n) => n.trim()).filter(Boolean))
     return swapWindowDateKeys.filter((key) =>
       allowed.has((swapThreeMonthChildByDateKey.get(key) ?? '').trim()),
     )
-  }, [userRole, linkedChildren, swapWindowDateKeys, swapThreeMonthChildByDateKey])
+  }, [userRole, effectiveLinkedChildren, swapWindowDateKeys, swapThreeMonthChildByDateKey])
 
   const activeSwapRequestDateKeys = useMemo(() => {
     const s = new Set<string>()

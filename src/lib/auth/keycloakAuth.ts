@@ -13,7 +13,7 @@ let keycloak: Keycloak | null = null
 let initPromise: Promise<AuthSession> | null = null
 let refreshTimer: number | null = null
 
-function readProfile(): Pick<AuthSession, 'displayName' | 'email' | 'sub'> {
+function readProfile(): Pick<AuthSession, 'displayName' | 'email' | 'sub' | 'preferredUsername'> {
   const parsed = keycloak?.tokenParsed as
     | {
         preferred_username?: string
@@ -26,6 +26,7 @@ function readProfile(): Pick<AuthSession, 'displayName' | 'email' | 'sub'> {
   return {
     displayName: parsed?.name ?? parsed?.preferred_username ?? parsed?.email ?? null,
     email: parsed?.email ?? null,
+    preferredUsername: parsed?.preferred_username ?? null,
     sub: parsed?.sub ?? null,
   }
 }
@@ -100,6 +101,7 @@ export async function initAuth(): Promise<AuthSession> {
       token: null,
       displayName: null,
       email: null,
+      preferredUsername: null,
       sub: null,
       role: 'viewer',
     }
@@ -134,6 +136,7 @@ export async function initAuth(): Promise<AuthSession> {
         token: null,
         displayName: null,
         email: null,
+        preferredUsername: null,
         sub: null,
         role: 'viewer',
       }

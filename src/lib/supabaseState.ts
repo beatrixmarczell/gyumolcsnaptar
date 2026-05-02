@@ -362,7 +362,9 @@ export function applyAppStatePayload(
     setManualOverrides,
   } = setters
   const mergedStart: Record<string, string> = { '2026-02': 'Petrilla Ádám', ...(p.startChildByMonth ?? {}) }
-  if (p.childrenText !== undefined) setChildrenText(p.childrenText)
+  if (p.childrenText !== undefined && typeof p.childrenText === 'string' && p.childrenText.trim().length > 0) {
+    setChildrenText(p.childrenText)
+  }
   if (p.monthValue !== undefined) setMonthValue(p.monthValue)
   if (p.startChildByMonth !== undefined) setStartChildByMonth(mergedStart)
   if (p.monthOffDaysByMonth !== undefined) setMonthOffDaysByMonth(p.monthOffDaysByMonth)
