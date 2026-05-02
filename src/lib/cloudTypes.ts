@@ -24,9 +24,11 @@ export type AppStatePayload = {
   offDayLabelsByMonth?: Record<string, Record<string, string>>
 }
 
+/** `null` = nincs szűrés (admin); tömb = szerkesztőhöz kötött gyereknevek a `parent_child_links` alapján. */
 export type CloudLoadResult = {
   payload: AppStatePayload | null
   role: AppUserRole
   displayName: string | null
   userProfileId?: string | null
+  linkedChildren?: string[] | null
 }

@@ -87,8 +87,6 @@ const KEYCLOAK_AUTH = isKeycloakAuthEnabled()
 const CLOUD_SAVE_DEBOUNCE_MS = 1000
 const KEYCLOAK_URL = (import.meta.env.VITE_KEYCLOAK_URL as string | undefined) ?? ''
 const LOCAL_GATEWAY_BEARER_TOKEN = (import.meta.env.VITE_LOCAL_GATEWAY_BEARER_TOKEN as string | undefined)?.trim() ?? ''
-const SWAP_ADMIN_TEST_MODE = import.meta.env.VITE_SWAP_ADMIN_TEST_MODE === 'true'
-
 const rolePriority: Record<AppUserRole, number> = {
   viewer: 0,
   editor: 1,
@@ -334,6 +332,8 @@ function App() {
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
+  /** `null` = nincs szűrés (admin / még nem töltött); tömb = szerkesztő linked gyerekek. */
+  const [linkedChildren, setLinkedChildren] = useState<string[] | null>(null)
   const [manualSaveSnapshot, setManualSaveSnapshot] = useState<ManualSaveSnapshot | null>(() => {
     try {
       const stored = localStorage.getItem(MANUAL_SAVE_SNAPSHOT_STORAGE_KEY)
@@ -374,7 +374,13 @@ function App() {
   const canEdit = KEYCLOAK_AUTH
     ? isAuthenticated && (userRole === 'admin' || userRole === 'editor')
     : true
-  const useLocalGatewayToken = KEYCLOAK_AUTH && KEYCLOAK_URL.startsWith('http://localhost') && Boolean(LOCAL_GATEWAY_BEARER_TOKEN)
+  // A lokális bearer csak kijelentkezve (!isAuthenticated): bejelentkezve kötelező a Keycloak JWT,
+  // különben minden hívás a gateway DESKTOP_ACCESS_TOKEN ágára esik → mindig admin.
+  const useLocalGatewayToken =
+    KEYCLOAK_AUTH &&
+    KEYCLOAK_URL.startsWith('http://localhost') &&
+    Boolean(LOCAL_GATEWAY_BEARER_TOKEN) &&
+    !isAuthenticated
   const gatewayAccessToken = useLocalGatewayToken ? LOCAL_GATEWAY_BEARER_TOKEN : accessToken
   const themeModeValue = darkMode ? 'dark' : uiTheme
   const { year, monthIndex } = fromMonthInputValue(monthValue)
@@ -390,6 +396,8 @@ function App() {
       setUserRole(session.role)
       setUserDisplayName(session.displayName ?? session.email)
       if (!session.authenticated) {
+        cloudBootstrapStarted.current = false
+        setLinkedChildren(null)
         // Viewer mode: only show cloud "loading" when sync is actually enabled (waiting for login).
         if (CLOUD_SYNC) {
           setCloudStatus('loading')
@@ -405,7 +413,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!CLOUD_SYNC) {
+    if (!CLOUD_SYNC && !KEYCLOAK_AUTH) {
       return
     }
     if (KEYCLOAK_AUTH && !authReady) {
@@ -413,15 +421,27 @@ function App() {
     }
     const hasToken = Boolean(gatewayAccessToken)
     if (KEYCLOAK_AUTH && isAuthenticated && !hasToken) {
-      setCloudStatus('off')
+      if (CLOUD_SYNC) {
+        setCloudStatus('off')
+      }
       return
     }
-    if (cloudBootstrapStarted.current) {
+    const shouldApplyCloudPayload =
+      CLOUD_SYNC && (!KEYCLOAK_AUTH || (isAuthenticated && hasToken))
+    const shouldFetchKeycloakProfile = KEYCLOAK_AUTH && isAuthenticated && hasToken
+    if (!shouldApplyCloudPayload && !shouldFetchKeycloakProfile) {
       return
     }
-    cloudBootstrapStarted.current = true
+    if (shouldApplyCloudPayload && cloudBootstrapStarted.current) {
+      return
+    }
+    if (shouldApplyCloudPayload) {
+      cloudBootstrapStarted.current = true
+    }
     const run = async (): Promise<void> => {
-      setCloudStatus('loading')
+      if (CLOUD_SYNC && shouldApplyCloudPayload) {
+        setCloudStatus('loading')
+      }
       try {
         const remote = await fetchGroupState({ accessToken: gatewayAccessToken })
         setUserRole((prev) => keepHigherRole(prev, remote.role))
@@ -429,7 +449,10 @@ function App() {
         if (remote.displayName) {
           setUserDisplayName(remote.displayName)
         }
-        if (remote.payload) {
+        if (remote.linkedChildren !== undefined) {
+          setLinkedChildren(remote.linkedChildren)
+        }
+        if (shouldApplyCloudPayload && remote.payload) {
           applyAppStatePayload(remote, {
             setChildrenText,
             setMonthValue,
@@ -447,12 +470,18 @@ function App() {
             setManualOverrides: () => {},
           })
         }
-        setCloudStatus('ok')
+        if (CLOUD_SYNC && shouldApplyCloudPayload) {
+          setCloudStatus('ok')
+        }
       } catch (e) {
         console.error('Felhő betöltés:', e)
-        setCloudStatus('err')
+        if (CLOUD_SYNC && shouldApplyCloudPayload) {
+          setCloudStatus('err')
+        }
       } finally {
-        setCanSaveToCloud(true)
+        if (CLOUD_SYNC && shouldApplyCloudPayload) {
+          setCanSaveToCloud(true)
+        }
       }
     }
     void run()
@@ -735,16 +764,102 @@ function App() {
     const normalized = (userDisplayName ?? '').trim().toLowerCase()
     return normalized === 'admin.demo' || normalized === 'admin_demo' || normalized.includes('demo admin')
   }, [userDisplayName])
-  const swapAdminTestEnabled =
-    SWAP_ADMIN_TEST_MODE && KEYCLOAK_AUTH && isAuthenticated && userRole === 'admin'
+  const swapPanelEnabled = KEYCLOAK_AUTH && isAuthenticated && userRole !== 'viewer'
   const visibleSwapRequests = useMemo(
     () => (showClosedSwapRequests ? swapRequests : swapRequests.filter((request) => request.status === 'requested')),
     [showClosedSwapRequests, swapRequests],
   )
-  const monthDateKeys = useMemo(() => workingDays.map((d) => toDateKey(d)), [workingDays])
+  const swapThreeMonthChildByDateKey = useMemo(() => {
+    const map = new Map<string, string>()
+    const monthSlots = [0, 1, 2].map((offset) => {
+      const slot = addMonths(year, monthIndex, offset)
+      const slotMonthValue = toMonthValue(slot.year, slot.monthIndex)
+      return { ...slot, monthValue: slotMonthValue }
+    })
+    if (children.length === 0) {
+      return map
+    }
+    let rollingStartChild = startChild
+    for (let idx = 0; idx < monthSlots.length; idx += 1) {
+      const slot = monthSlots[idx]
+      const slotOverrides = manualOverridesByMonth[slot.monthValue] ?? {}
+      const slotOffDays = new Set(parseDateKeys(monthOffDaysByMonth[slot.monthValue] ?? ''))
+      const slotWorkingDays = getMonthWorkingDays(slot.year, slot.monthIndex, slotOffDays)
+      const explicitStart = startChildByMonth[slot.monthValue]
+      const slotStartChild = idx === 0 ? startChild : explicitStart ?? rollingStartChild ?? children[0] ?? ''
+      const slotResult = generateAssignments({
+        children,
+        monthWorkingDays: slotWorkingDays,
+        startChild: slotStartChild,
+        manualOverrides: slotOverrides,
+        excludedChildren: [],
+      })
+      rollingStartChild = slotResult.nextStartChild || slotStartChild
+      for (const a of slotResult.assignments) {
+        map.set(a.dateKey, a.child)
+      }
+    }
+    return map
+  }, [children, year, monthIndex, manualOverridesByMonth, monthOffDaysByMonth, startChildByMonth, startChild])
+  const swapWindowDateKeys = useMemo(
+    () => [...swapThreeMonthChildByDateKey.keys()].sort(),
+    [swapThreeMonthChildByDateKey],
+  )
+  const swapLinkedMonthDateKeys = useMemo(() => {
+    if (userRole === 'admin') {
+      return swapWindowDateKeys
+    }
+    if (linkedChildren === null) {
+      return []
+    }
+    const allowed = new Set(linkedChildren.map((n) => n.trim()).filter(Boolean))
+    return swapWindowDateKeys.filter((key) =>
+      allowed.has((swapThreeMonthChildByDateKey.get(key) ?? '').trim()),
+    )
+  }, [userRole, linkedChildren, swapWindowDateKeys, swapThreeMonthChildByDateKey])
+
+  const activeSwapRequestDateKeys = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of swapRequests) {
+      if (r.status === 'requested') {
+        s.add(r.requester_date_key)
+      }
+    }
+    return s
+  }, [swapRequests])
+
+  /** Új kérés: olyan napok, ahol még nincs csoportszintű nyitott kérelem erre a dátumra. */
+  const swapNewRequestDateKeys = useMemo(
+    () => swapLinkedMonthDateKeys.filter((k) => !activeSwapRequestDateKeys.has(k)),
+    [swapLinkedMonthDateKeys, activeSwapRequestDateKeys],
+  )
+
+  useEffect(() => {
+    if (!swapRequestDateKey) {
+      return
+    }
+    if (!swapNewRequestDateKeys.includes(swapRequestDateKey)) {
+      setSwapRequestDateKey('')
+    }
+  }, [swapNewRequestDateKeys, swapRequestDateKey])
+
+  useEffect(() => {
+    const allowed = new Set(swapLinkedMonthDateKeys)
+    setSwapOfferDateByRequest((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const [rid, dateKey] of Object.entries(prev)) {
+        if (dateKey && !allowed.has(dateKey)) {
+          delete next[rid]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [swapLinkedMonthDateKeys])
   /** A naptár aktuális állapota dátum kulcsonként (kérés/ajánlat listán a tárolt név helyett ezt mutatjuk). */
   const currentChildNameByDateKey = useMemo(() => {
-    const out = new Map<string, string>(assignedChildByDateKey)
+    const out = new Map<string, string>(swapThreeMonthChildByDateKey)
     const needed = new Set<string>()
     for (const r of swapRequests) {
       needed.add(r.requester_date_key)
@@ -782,7 +897,7 @@ function App() {
     }
     return out
   }, [
-    assignedChildByDateKey,
+    swapThreeMonthChildByDateKey,
     swapRequests,
     monthOffDaysByMonth,
     startChildByMonth,
@@ -1224,7 +1339,7 @@ function App() {
   }, [offDayDragMode])
 
   const refreshSwapRequests = async (): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+    if (!swapPanelEnabled || !gatewayAccessToken) {
       setSwapRequests([])
       return
     }
@@ -1241,16 +1356,16 @@ function App() {
   }
 
   useEffect(() => {
-    if (!swapAdminTestEnabled) {
+    if (!swapPanelEnabled) {
       setSwapRequests([])
       setSwapError(null)
       return
     }
     void refreshSwapRequests()
-  }, [swapAdminTestEnabled])
+  }, [swapPanelEnabled, userRole, gatewayAccessToken])
 
   const handleDeleteClosedSwapRequest = async (requestId: string): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+    if (!swapPanelEnabled || !gatewayAccessToken) {
       return
     }
     const ok = window.confirm('Biztosan törlöd ezt a lezárt/visszavont csere-kérést?')
@@ -1270,10 +1385,10 @@ function App() {
   }
 
   const handleCreateSwapRequest = async (): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken || !swapRequestDateKey || children.length === 0) {
+    if (!swapPanelEnabled || !gatewayAccessToken || !swapRequestDateKey || children.length === 0) {
       return
     }
-    const requesterChildName = assignedChildByDateKey.get(swapRequestDateKey)
+    const requesterChildName = swapThreeMonthChildByDateKey.get(swapRequestDateKey)
     if (!requesterChildName) {
       setSwapError(`A kiválasztott dátumhoz nem található kiosztott név: ${swapRequestDateKey}`)
       return
@@ -1297,7 +1412,7 @@ function App() {
 
   const handleCreateOffer = async (requestId: string): Promise<void> => {
     const offerDateKey = swapOfferDateByRequest[requestId]
-    if (!swapAdminTestEnabled || !gatewayAccessToken || !offerDateKey || children.length === 0) {
+    if (!swapPanelEnabled || !gatewayAccessToken || !offerDateKey || children.length === 0) {
       return
     }
     const request = swapRequests.find((row) => row.id === requestId)
@@ -1309,7 +1424,7 @@ function App() {
       setSwapError('Ugyanarra a napra nem küldhető ajánlat.')
       return
     }
-    const offerChildName = assignedChildByDateKey.get(offerDateKey)
+    const offerChildName = swapThreeMonthChildByDateKey.get(offerDateKey)
     if (!offerChildName) {
       setSwapError(`A kiválasztott ajánlat dátumhoz nem található kiosztott név: ${offerDateKey}`)
       return
@@ -1338,7 +1453,7 @@ function App() {
   }
 
   const handleWithdrawOffer = async (offerId: string): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+    if (!swapPanelEnabled || !gatewayAccessToken) {
       return
     }
     setSwapBusy(true)
@@ -1354,7 +1469,7 @@ function App() {
   }
 
   const handleApproveOffer = async (requestId: string, offerId: string): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+    if (!swapPanelEnabled || !gatewayAccessToken) {
       return
     }
     setSwapBusy(true)
@@ -1381,6 +1496,9 @@ function App() {
           const remote = await fetchGroupState({ accessToken: gatewayAccessToken })
           setUserRole((prev) => keepHigherRole(prev, remote.role))
           setUserProfileId(remote.userProfileId ?? null)
+          if (remote.linkedChildren !== undefined) {
+            setLinkedChildren(remote.linkedChildren)
+          }
           if (remote.displayName) {
             setUserDisplayName(remote.displayName)
           }
@@ -1417,7 +1535,7 @@ function App() {
   }
 
   const handleWithdrawRequest = async (requestId: string): Promise<void> => {
-    if (!swapAdminTestEnabled || !gatewayAccessToken) {
+    if (!swapPanelEnabled || !gatewayAccessToken) {
       return
     }
     setSwapBusy(true)
@@ -1700,7 +1818,7 @@ function App() {
         ) : null}
 
         <div className="main-column">
-          {swapAdminTestEnabled ? (
+          {swapPanelEnabled ? (
             <section className="panel swap-admin-panel">
               <button
                 type="button"
@@ -1708,23 +1826,29 @@ function App() {
                 onClick={() => setSwapPanelOpen((prev) => !prev)}
                 aria-label={swapPanelOpen ? 'Csere panel becsukása' : 'Csere panel kinyitása'}
               >
-                <span>Parent Swap (Admin Test Mode)</span>
+                <span>Cserek</span>
                 <span>{swapPanelOpen ? '▲' : '▼'}</span>
               </button>
               <div className={`mobile-panel-content ${swapPanelOpen ? '' : 'mobile-collapsed'}`}>
-                <h2>Parent Swap (Admin Test Mode)</h2>
+                <h2>Cserek</h2>
                 <div className="swap-request-create-card">
                   <p className="swap-request-create-title">Csere igénylés:</p>
+                  <p className="compact-note">
+                    A választható napok a táblázat aktuális hónapjától a rákövetkező két hónapra esnek (ugyanúgy, mint a gyerekszűrőnél); a listában a naphoz tartozó kiosztott gyerek is látszik.
+                  </p>
                   <div className="swap-admin-actions">
                     <label>
                       Kérés dátuma
                       <select value={swapRequestDateKey} onChange={(e) => setSwapRequestDateKey(e.target.value)}>
                         <option value="">-- Válassz dátumot --</option>
-                        {monthDateKeys.map((key) => (
-                          <option key={`request-date-${key}`} value={key}>
-                            {key}
-                          </option>
-                        ))}
+                        {swapNewRequestDateKeys.map((key) => {
+                          const child = swapThreeMonthChildByDateKey.get(key)?.trim()
+                          return (
+                            <option key={`request-date-${key}`} value={key}>
+                              {child ? `${key} — ${child}` : key}
+                            </option>
+                          )
+                        })}
                       </select>
                     </label>
                     <button
@@ -1792,11 +1916,14 @@ function App() {
                           disabled={swapBusy || request.status !== 'requested'}
                         >
                           <option value="">-- Válassz dátumot --</option>
-                          {monthDateKeys.map((key) => (
-                            <option key={`offer-date-${request.id}-${key}`} value={key}>
-                              {key}
-                            </option>
-                          ))}
+                          {swapLinkedMonthDateKeys.map((key) => {
+                            const child = swapThreeMonthChildByDateKey.get(key)?.trim()
+                            return (
+                              <option key={`offer-date-${request.id}-${key}`} value={key}>
+                                {child ? `${key} — ${child}` : key}
+                              </option>
+                            )
+                          })}
                         </select>
                       </label>
                       <button

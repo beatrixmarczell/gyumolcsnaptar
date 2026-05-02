@@ -13,6 +13,7 @@
     "infra:up": "docker compose -f keycloak/docker-compose.yml up -d",
     "infra:down": "docker compose -f keycloak/docker-compose.yml down",
     "infra:logs": "docker compose -f keycloak/docker-compose.yml logs -f keycloak cloudflared",
+    "infra:keycloak-demo-parents": "node keycloak/scripts/ensure-demo-parent-users.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -274,13 +274,67 @@ function isDateKey(value: string): boolean {
   return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)
 }
 
-async function ensureChildLinked(groupId: string, userId: string, childName: string): Promise<void> {
+/** A `resolveMembership` upsert eltérő PK-t adhat, mint a seedelt `parent_child_links`; ugyanarra az e-mailre lévő profilokat egyesítjük. */
+async function collectProfileIdsForParentLinks(userId: string, email: string | null): Promise<string[]> {
+  const ids = new Set<string>([userId])
+  const raw = email?.trim()
+  if (raw) {
+    const { data: rows, error } = await supabase.from('user_profiles').select('id').ilike('email', raw)
+    if (error) {
+      throw new Error(error.message)
+    }
+    for (const r of rows ?? []) {
+      if (r && typeof r.id === 'string') {
+        ids.add(r.id)
+      }
+    }
+  }
+  return [...ids]
+}
+
+async function loadLinkedChildNames(
+  groupId: string,
+  role: AppRole,
+  userId: string,
+  identity: { email: string | null },
+): Promise<string[] | null> {
+  if (role === 'admin') {
+    return null
+  }
+  if (role === 'viewer') {
+    return []
+  }
+  const profileIds = await collectProfileIdsForParentLinks(userId, identity.email)
   const { data, error } = await supabase
     .from('parent_child_links')
     .select('child_name')
     .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .eq('child_name', childName)
+    .in('user_id', profileIds)
+  if (error) {
+    throw new Error(error.message)
+  }
+  const names = (data ?? [])
+    .map((row) => (row && typeof (row as { child_name?: unknown }).child_name === 'string'
+      ? (row as { child_name: string }).child_name.trim()
+      : ''))
+    .filter(Boolean)
+  return [...new Set(names)]
+}
+
+async function ensureChildLinked(
+  groupId: string,
+  userId: string,
+  childName: string,
+  identity: { email: string | null },
+): Promise<void> {
+  const profileIds = await collectProfileIdsForParentLinks(userId, identity.email)
+  const { data, error } = await supabase
+    .from('parent_child_links')
+    .select('child_name')
+    .eq('group_id', groupId)
+    .in('user_id', profileIds)
+    .eq('child_name', childName.trim())
+    .limit(1)
     .maybeSingle()
   if (error) {
     throw new Error(error.message)
@@ -372,11 +426,21 @@ Deno.serve(async (req) => {
       if (error) {
         return json(500, { error: `Lekérés sikertelen: ${error.message}` })
       }
+      let linkedChildren: string[] | null
+      try {
+        linkedChildren = await loadLinkedChildNames(groupId, access.role, access.userId, {
+          email: identity.email,
+        })
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'linkedChildren lekérés sikertelen.'
+        return json(500, { error: message })
+      }
       return json(200, {
         payload: data?.payload ?? null,
         role: access.role,
         displayName: identity.displayName,
         userProfileId: access.userId,
+        linkedChildren,
       })
     }
 
@@ -404,7 +468,19 @@ Deno.serve(async (req) => {
 
     if (action === 'swap_list') {
       const board = await loadSwapBoard(groupId)
-      return json(200, { ...board, role: access.role, userProfileId: access.userId })
+      if (access.role === 'admin') {
+        return json(200, { ...board, role: access.role, userProfileId: access.userId })
+      }
+      if (access.role === 'viewer') {
+        return json(200, { requests: [], role: access.role, userProfileId: access.userId })
+      }
+      const uid = access.userId
+      const filtered = board.requests.filter(
+        (r) =>
+          r.requester_user_id === uid ||
+          (r.status === 'requested' && r.requester_user_id !== uid),
+      )
+      return json(200, { requests: filtered, role: access.role, userProfileId: access.userId })
     }
 
     if (action === 'swap_request_create') {
@@ -417,7 +493,22 @@ Deno.serve(async (req) => {
         return json(400, { error: 'Hiányzó vagy hibás requesterChildName / requesterDateKey.' })
       }
       if (access.role !== 'admin') {
-        await ensureChildLinked(groupId, access.userId, requesterChildName)
+        await ensureChildLinked(groupId, access.userId, requesterChildName, { email: identity.email })
+      }
+      const { data: openSameDate, error: openCheckErr } = await supabase
+        .from('swap_requests')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('requester_date_key', requesterDateKey)
+        .eq('status', 'requested')
+        .maybeSingle()
+      if (openCheckErr) {
+        return json(500, { error: `Csere kérés ellenőrzés sikertelen: ${openCheckErr.message}` })
+      }
+      if (openSameDate) {
+        return json(409, {
+          error: 'Erre a dátumra már van nyitott csere kérés. Vondd vissza vagy válassz másik napot.',
+        })
       }
       const { data, error } = await supabase
         .from('swap_requests')
@@ -432,6 +523,11 @@ Deno.serve(async (req) => {
         .select('*')
         .single()
       if (error) {
+        if (error.code === '23505') {
+          return json(409, {
+            error: 'Erre a dátumra már van nyitott csere kérés. Vondd vissza vagy válassz másik napot.',
+          })
+        }
         return json(500, { error: `Csere kérés mentése sikertelen: ${error.message}` })
       }
       await supabase.from('swap_events').insert({
@@ -455,7 +551,7 @@ Deno.serve(async (req) => {
         return json(400, { error: 'Hiányzó vagy hibás requestId / offerChildName / offerDateKey.' })
       }
       if (access.role !== 'admin') {
-        await ensureChildLinked(groupId, access.userId, offerChildName)
+        await ensureChildLinked(groupId, access.userId, offerChildName, { email: identity.email })
       }
       const { data: requestRow, error: requestError } = await supabase
         .from('swap_requests')

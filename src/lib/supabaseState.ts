@@ -137,6 +137,17 @@ export function parseAppStatePayload(raw: unknown): AppStatePayload | null {
   }
 }
 
+/** Szerver `load` válasz – `null` = admin (nincs szűrés); egyébként szerkesztőhöz kötött nevek. */
+function normalizeLinkedChildrenField(raw: unknown): string[] | null {
+  if (raw === null) {
+    return null
+  }
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw.filter((name): name is string => typeof name === 'string')
+}
+
 async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadResult> {
   const endpoint = getFunctionUrl('keycloak-gateway')
   const groupId = getDefaultGroupId()
@@ -156,6 +167,7 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
     role?: AppUserRole
     displayName?: string | null
     userProfileId?: string | null
+    linkedChildren?: unknown
     error?: string
   }
 
@@ -163,12 +175,22 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
     throw new Error(json.error ?? 'Sikertelen felhő lekérés.')
   }
   const payload = json.payload ? parseAppStatePayload(json.payload) : null
-  return {
+  const role = (json.role ?? 'viewer') as AppUserRole
+  const result: CloudLoadResult = {
     payload,
-    role: json.role ?? 'viewer',
+    role,
     displayName: json.displayName ?? null,
     userProfileId: json.userProfileId ?? null,
   }
+  if (Object.prototype.hasOwnProperty.call(json, 'linkedChildren')) {
+    result.linkedChildren = normalizeLinkedChildrenField(json.linkedChildren)
+  } else if (role === 'editor' || role === 'viewer') {
+    // Régi gateway / proxy: hiányzó mező ne maradjon „nem frissült” állapotban a kliensen.
+    result.linkedChildren = []
+  } else {
+    result.linkedChildren = null
+  }
+  return result
 }
 
 async function fetchPublicReadOnlyState(): Promise<CloudLoadResult> {
@@ -209,7 +231,7 @@ export async function fetchGroupState(params?: {
   const supabase = getSupabase()
   const groupId = getDefaultGroupId()
   if (!supabase || !groupId) {
-    return { payload: null, role: 'admin', displayName: null }
+    return { payload: null, role: 'admin', displayName: null, userProfileId: null, linkedChildren: null }
   }
   const { data, error } = await supabase
     .from('group_calendar_state')
@@ -225,6 +247,7 @@ export async function fetchGroupState(params?: {
     role: 'admin',
     displayName: null,
     userProfileId: null,
+    linkedChildren: null,
   }
 }
 
