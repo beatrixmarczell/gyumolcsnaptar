@@ -943,6 +943,22 @@ table {
   font-size: 0.78rem;
 }
 
+.swap-withdraw-own-request {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 2px;
+}
+
+.swap-withdraw-btn {
+  width: 100%;
+  max-width: 240px;
+  padding: 9px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 8px;
+  letter-spacing: 0.02em;
+}
+
 .swap-offer-list {
   list-style: none;
   margin: 2px 0 0;

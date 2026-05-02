@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   addOneMonth,
@@ -897,7 +897,67 @@ function App() {
       return changed ? next : prev
     })
   }, [swapLinkedMonthDateKeys])
-  /** A naptár aktuális állapota dátum kulcsonként (kérés/ajánlat listán a tárolt név helyett ezt mutatjuk). */
+  /**
+   * Egy adott hónaphoz (YYYY-MM) meghatározza a helyes kezdő gyereket az alábbi prioritással:
+   *  1. Explicit startChildByMonth[monthValue] – ha van
+   *  2. A legközelebbi korábbi hónaptól láncolt nextStartChild számítás
+   *  3. Ha nincs korábbi ismert pont, a globális startChild (az aktuális hónaphoz tartozik)
+   * Így a 3-hónapos ablakon kívüli (pl. múltbeli) dátumok is helyesen jelennek meg.
+   */
+  const resolveStartChildForMonth = useCallback(
+    (targetMonthValue: string): string => {
+      if (startChildByMonth[targetMonthValue]) {
+        return startChildByMonth[targetMonthValue]
+      }
+      const [tyStr, tmStr] = targetMonthValue.split('-')
+      const targetY = Number(tyStr)
+      const targetM = Number(tmStr)
+      // Keresünk egy közeli ismert kiindulópontot visszafelé (max 36 hónap)
+      let baseY = targetY
+      let baseM = targetM - 1
+      if (baseM <= 0) { baseM += 12; baseY-- }
+      let baseStartChild: string | null = null
+      let baseMonthValue: string | null = null
+      for (let i = 0; i < 36; i++) {
+        const mv = `${baseY}-${String(baseM).padStart(2, '0')}`
+        if (startChildByMonth[mv]) {
+          baseStartChild = startChildByMonth[mv]
+          baseMonthValue = mv
+          break
+        }
+        baseM--
+        if (baseM <= 0) { baseM += 12; baseY-- }
+      }
+      if (!baseMonthValue || !baseStartChild) {
+        // Nincs korábbi ismert pont; a startChild az aktuális hónaphoz tartozik,
+        // onnan láncoljuk előre (ha célhónap > aktuális) vagy visszatérünk
+        return startChild
+      }
+      // Láncolás baseMonthValue+1 → targetMonthValue-ig
+      let rolling = baseStartChild
+      let [chainY, chainM] = baseMonthValue.split('-').map(Number)
+      chainM++
+      if (chainM > 12) { chainM = 1; chainY++ }
+      while (`${chainY}-${String(chainM).padStart(2, '0')}` !== targetMonthValue) {
+        const mv = `${chainY}-${String(chainM).padStart(2, '0')}`
+        const explicit = startChildByMonth[mv]
+        const chainStart = explicit ?? rolling
+        const offDays = new Set(parseDateKeys(monthOffDaysByMonth[mv] ?? ''))
+        const wDays = getMonthWorkingDays(chainY, chainM - 1, offDays)
+        const overrides = manualOverridesByMonth[mv] ?? {}
+        const res = generateAssignments({ children, monthWorkingDays: wDays, startChild: chainStart, manualOverrides: overrides, excludedChildren: [] })
+        rolling = res.nextStartChild || chainStart
+        chainM++
+        if (chainM > 12) { chainM = 1; chainY++ }
+        // biztonsági korlát: max 60 hónap láncolás
+        if (chainY * 12 + chainM > targetY * 12 + targetM + 1) break
+      }
+      return rolling
+    },
+    [startChildByMonth, startChild, monthOffDaysByMonth, manualOverridesByMonth, children],
+  )
+
+  /** A naptár aktuális állapota dátum kulcsonként (ajánlat-ellenőrzéshez és offer megjelenítéshez). */
   const currentChildNameByDateKey = useMemo(() => {
     const out = new Map<string, string>(swapThreeMonthChildByDateKey)
     const needed = new Set<string>()
@@ -922,7 +982,7 @@ function App() {
       const slotOffDays = new Set(parseDateKeys(monthOffDaysByMonth[monthValue] ?? ''))
       const slotWorkingDays = getMonthWorkingDays(y, monthIndex0, slotOffDays)
       const slotOverrides = manualOverridesByMonth[monthValue] ?? {}
-      const slotStartChild = startChildByMonth[monthValue] ?? startChild
+      const slotStartChild = resolveStartChildForMonth(monthValue)
       const slotResult = generateAssignments({
         children,
         monthWorkingDays: slotWorkingDays,
@@ -944,6 +1004,7 @@ function App() {
     manualOverridesByMonth,
     children,
     startChild,
+    resolveStartChildForMonth,
   ])
   const childFilterMonths = useMemo(() => {
     const monthSlots = [0, 1, 2].map((offset) => {
@@ -1910,24 +1971,24 @@ function App() {
                   {visibleSwapRequests.map((request) => (
                     <article key={request.id} className="swap-request-card">
                     <p
-                      title="A név a naptár jelenlegi hozzárendelése a kérés napján (nem a szerveren eltárolt kérés-szöveg)."
+                      title="A tárolt kérés-adatok: a gyerek neve és a kért dátum."
                     >
                       <strong>Kérés:</strong>{' '}
-                      {currentChildNameByDateKey.get(request.requester_date_key) ?? request.requester_child_name} @{' '}
+                      {request.requester_child_name} @{' '}
                       {request.requester_date_key} ({labelSwapRequestStatus(request.status)})
                     </p>
-                    {request.status === 'requested' ? (
-                      <div className="swap-offer-actions">
+                    {request.status === 'requested' && request.requester_user_id === userProfileId ? (
+                      <div className="swap-withdraw-own-request">
                         <button
                           type="button"
-                          className="action-button secondary swap-compact-action"
+                          className="action-button secondary swap-withdraw-btn"
                           disabled={swapBusy}
                           onClick={() => void handleWithdrawRequest(request.id)}
                         >
                           Kérés visszavonása
                         </button>
                       </div>
-                    ) : (
+                    ) : request.status !== 'requested' ? (
                       <div className="swap-closed-request-actions">
                         <p className="swap-inactive-hint">
                           A kérés lezárt/visszavont; külön törölhető, hogy ne szemetelje a listát.
@@ -1943,8 +2004,9 @@ function App() {
                           ×
                         </button>
                       </div>
-                    )}
-                    {request.requester_user_id !== userProfileId && (
+                    ) : null}
+                    {request.requester_user_id !== userProfileId &&
+                    !request.offers.some((o) => o.offer_user_id === userProfileId && o.status === 'pending') && (
                     <div
                       className={
                         request.status === 'requested' ? 'swap-admin-actions' : 'swap-admin-actions swap-inactive-block'
@@ -1996,22 +2058,26 @@ function App() {
                           </span>
                           {request.status === 'requested' && offer.status === 'pending' ? (
                             <div className="swap-offer-actions">
-                              <button
-                                type="button"
-                                className="action-button secondary"
-                                disabled={swapBusy}
-                                onClick={() => void handleApproveOffer(request.id, offer.id)}
-                              >
-                                Jóváhagyás
-                              </button>
-                              <button
-                                type="button"
-                                className="action-button secondary"
-                                disabled={swapBusy}
-                                onClick={() => void handleWithdrawOffer(offer.id)}
-                              >
-                                Ajánlat visszavonása
-                              </button>
+                              {request.requester_user_id === userProfileId && (
+                                <button
+                                  type="button"
+                                  className="action-button secondary"
+                                  disabled={swapBusy}
+                                  onClick={() => void handleApproveOffer(request.id, offer.id)}
+                                >
+                                  Jóváhagyás
+                                </button>
+                              )}
+                              {offer.offer_user_id === userProfileId && (
+                                <button
+                                  type="button"
+                                  className="action-button secondary"
+                                  disabled={swapBusy}
+                                  onClick={() => void handleWithdrawOffer(offer.id)}
+                                >
+                                  Ajánlat visszavonása
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <p className="swap-inactive-hint">
