@@ -71,14 +71,8 @@ const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli nap'
 const PDF_TEMPLATE_VERSION = 'PDF_TEMPLATE_V4'
 const APP_VERSION = __APP_VERSION__
 const APP_CHANNEL = __APP_CHANNEL__
-const APP_VERSION_DISPLAY = (() => {
-  const match = APP_VERSION.match(/v?\d+\.\d+\.\d+/i)
-  if (!match) {
-    return APP_VERSION
-  }
-  const core = match[0].replace(/^v/i, '')
-  return `v${core}`
-})()
+/** Teljes release név (semver + kebab), egyezik a git annotált taggel / package.json buildTag-gel. */
+const APP_VERSION_DISPLAY = APP_VERSION.trim() || 'v0.0.0'
 const IS_NEXT_CHANNEL = APP_CHANNEL === 'next'
 
 // Next branch is intentionally isolated from shared DB sync.
@@ -1657,7 +1651,10 @@ function App() {
                 NEXT
               </span>
             ) : null}
-            <span className="app-version-discrete" title="Alkalmazás verziója">
+            <span
+              className="app-version-discrete"
+              title={APP_VERSION ? `Alkalmazás verziója: ${APP_VERSION}` : 'Alkalmazás verziója'}
+            >
               {APP_VERSION_DISPLAY}
             </span>
             <span

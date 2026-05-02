@@ -189,6 +189,11 @@
   color: var(--text-secondary);
   opacity: 0.68;
   user-select: none;
+  text-align: right;
+  max-width: min(38ch, 100%);
+  white-space: normal;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .release-channel-badge {
