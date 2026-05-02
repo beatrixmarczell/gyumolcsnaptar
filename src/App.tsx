@@ -1948,7 +1948,7 @@ function App() {
                   <p className="swap-request-create-title">Csere igénylés:</p>
                   {swapNewRequestDateKeys.length === 0 && swapLinkedMonthDateKeys.length > 0 ? (
                     <p className="swap-no-offer-dates-hint">
-                      Minden elérhető napodra van már nyitott kérés — addig nem indíthatsz új igénylést. Vonj vissza egy meglévő kérést, vagy adj ajánlatot egy másik szülő kérésére.
+                      Minden elérhető napodra van már nyitott kérés — új igénylés indításához vonj vissza egy meglévő kérésedet, vagy vonj vissza egy ajánlatodat.
                     </p>
                   ) : (
                     <>
