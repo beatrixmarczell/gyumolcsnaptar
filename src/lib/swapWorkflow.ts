@@ -1,4 +1,10 @@
-import { getDefaultGroupId, getDesktopAccessToken, getFunctionUrl, isKeycloakAuthEnabled } from './supabaseClient'
+import {
+  buildEdgeFunctionHeaders,
+  getDefaultGroupId,
+  getDesktopAccessToken,
+  getFunctionUrl,
+  isKeycloakAuthEnabled,
+} from './supabaseClient'
 import { getAccessToken } from './auth/keycloakAuth'
 import type { AppStatePayload, AppUserRole } from './cloudTypes'
 
@@ -67,20 +73,13 @@ async function callGateway<T>(accessToken: string | null | undefined, body: Reco
   }
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: buildEdgeFunctionHeaders(token),
     body: JSON.stringify({ ...body, groupId }),
   })
-  const json = (await response.json()) as T & { error?: string }
+  const json = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string }
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error(
-        'A munkamenet lejárt vagy érvénytelen a token. Frissítsd az oldalt, vagy jelentkezz ki és be újra.',
-      )
-    }
-    throw new Error(json.error ?? 'Swap gateway hiba.')
+    const serverMsg = json.error ?? json.message
+    throw new Error(serverMsg ?? `Swap gateway hiba (${response.status}).`)
   }
   return json
 }

@@ -78,3 +78,22 @@ export function getFunctionUrl(functionName: string): string | null {
   }
   return `${url}/functions/v1/${functionName}`
 }
+
+/** Edge Functions: publikus anon kulcs a `apikey` fejléchez. */
+export function getSupabaseAnonKey(): string | null {
+  const k = anon?.trim()
+  return k || null
+}
+
+/** Böngészős fetch a Functions API felé: apikey + Authorization (Keycloak JWT). */
+export function buildEdgeFunctionHeaders(bearerToken: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${bearerToken}`,
+  }
+  const anonKey = getSupabaseAnonKey()
+  if (anonKey) {
+    headers.apikey = anonKey
+  }
+  return headers
+}

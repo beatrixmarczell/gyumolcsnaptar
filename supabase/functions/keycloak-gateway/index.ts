@@ -959,6 +959,7 @@ Deno.serve(async (req) => {
     return json(400, { error: 'Ismeretlen action.' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Ismeretlen hiba'
-    return json(401, { error: message })
+    console.error('[keycloak-gateway]', message)
+    return json(500, { error: message })
   }
 })

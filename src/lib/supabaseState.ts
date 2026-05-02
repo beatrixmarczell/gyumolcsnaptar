@@ -6,6 +6,7 @@ import {
   type HeaderImageState,
 } from './cloudTypes'
 import {
+  buildEdgeFunctionHeaders,
   getDefaultGroupId,
   getDesktopAccessToken,
   getFunctionUrl,
@@ -173,10 +174,7 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
   }
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: buildEdgeFunctionHeaders(accessToken),
     body: JSON.stringify({ action: 'load', groupId }),
   })
   const json = (await response.json()) as {
@@ -288,10 +286,7 @@ export async function saveGroupState(
     }
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildEdgeFunctionHeaders(token),
       body: JSON.stringify({ action: 'save', groupId, payload }),
     })
     if (!response.ok) {
