@@ -1278,21 +1278,15 @@ Deno.serve(async (req) => {
         event_type: 'swap_request_withdrawn',
         payload: {},
       })
-      // Értesítés: ajánlattevők
-      const offerRecipients: NotifyRecipient[] = []
-      for (const uid of offerUserIds) {
-        if (uid === access.userId) continue
-        const r = await loadUserNotifyRecipient(uid)
-        if (r) offerRecipients.push(r)
-      }
-      if (offerRecipients.length > 0) {
-        await notifyUsers(groupId, offerRecipients, {
-          event_type: 'swap_request_withdrawn',
-          title: 'Csere kérés visszavonva',
-          body: 'Egy csere kérés visszavonásra került, amelyre ajánlatot tettél.',
-          request_id: requestId,
-        })
-      }
+      // Értesítés: mindenki a csoportban kivéve a visszavonó
+      const withdrawRecipients = await loadGroupNotifyRecipients(groupId, access.userId)
+      await notifyUsers(groupId, withdrawRecipients, {
+        event_type: 'swap_request_withdrawn',
+        title: 'Csere kérés visszavonva',
+        body: `${(requestRow as SwapRequestRow).requester_child_name} (${(requestRow as SwapRequestRow).requester_date_key}) napjára visszavontak egy csere kérést.`,
+        request_id: requestId,
+      })
+      void offerUserIds
       return json(200, { ok: true })
     }
 
@@ -1327,6 +1321,15 @@ Deno.serve(async (req) => {
       if (offerErr || !offerRow) {
         return json(404, { error: 'Swap offer nem található.' })
       }
+      // Többi ajánlattevő lekérdezése az RPC előtt, amíg még 'pending' státuszban vannak
+      const { data: otherOfferRows } = await supabase
+        .from('swap_offers')
+        .select('offer_user_id')
+        .eq('request_id', requestId)
+        .eq('status', 'pending')
+        .neq('id', offerId)
+      const otherOfferUserIds = [...new Set((otherOfferRows ?? []).map((o) => o.offer_user_id as string))]
+
       const { data: swappedPayload, error: swapError } = await supabase.rpc('apply_swap_offer', {
         p_group_id: groupId,
         p_request_id: requestId,
@@ -1353,18 +1356,38 @@ Deno.serve(async (req) => {
           payload: {},
         },
       ])
-      // Értesítés: mindenki a csoportban (kérvényező + ajánlattevő + adminok)
       const req = requestRow as SwapRequestRow
-      const allRecipients = await loadGroupNotifyRecipients(groupId, null)
-      const notifyBody = `${req.requester_child_name} (${req.requester_date_key}) ↔ ${offerChildName ?? ''} (${offerDateKey ?? ''}) csere végrehajtva.`
-      await notifyUsers(groupId, allRecipients, {
+      const notifyBodySuccess = `${req.requester_child_name} (${req.requester_date_key}) ↔ ${offerChildName ?? ''} (${offerDateKey ?? ''}) csere végrehajtva.`
+
+      // Értesítés 1: igénylő + elfogadott ajánlattevő + adminok
+      const allMembers = await loadGroupNotifyRecipients(groupId, null)
+      const primaryRecipients = allMembers.filter((r) => !otherOfferUserIds.includes(r.userId))
+      await notifyUsers(groupId, primaryRecipients, {
         event_type: 'swap_request_resolved',
         title: 'Csere lezárult',
-        body: notifyBody,
+        body: notifyBodySuccess,
         payload: { requesterChildName: req.requester_child_name, offerChildName, offerDateKey },
         request_id: requestId,
         offer_id: offerId,
       })
+
+      // Értesítés 2: többi ajánlattevő — ajánlatuk nem lett kiválasztva
+      if (otherOfferUserIds.length > 0) {
+        const rejectedRecipients: NotifyRecipient[] = []
+        for (const uid of otherOfferUserIds) {
+          const r = await loadUserNotifyRecipient(uid)
+          if (r) rejectedRecipients.push(r)
+        }
+        if (rejectedRecipients.length > 0) {
+          await notifyUsers(groupId, rejectedRecipients, {
+            event_type: 'swap_offer_rejected',
+            title: 'Csere kérés lezárult',
+            body: `${req.requester_child_name} (${req.requester_date_key}) napjára érkező csere kérést elfogadták, ajánlatod nem lett kiválasztva.`,
+            request_id: requestId,
+          })
+        }
+      }
+
       void offerUserId
       return json(200, { ok: true, payload: swappedPayload })
     }
