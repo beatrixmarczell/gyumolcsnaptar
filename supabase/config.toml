@@ -76,7 +76,6 @@ verify_jwt = false
 # A function maga is Europe/Budapest TZ-aware, így télen is jól számol.
 [functions.daily-fruit-reminder]
 verify_jwt = false
-schedule = "0 5 * * *"
 
 [analytics]
 enabled = false
