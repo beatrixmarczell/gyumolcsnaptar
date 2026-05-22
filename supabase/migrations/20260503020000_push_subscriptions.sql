@@ -2,6 +2,24 @@
 -- Egy user több eszközről is feliratkozhat (pl. telefon + laptop) → unique(user_id, endpoint).
 -- Csak service role érheti el; az Edge Function kezeli az upsert/delete-et.
 
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'push_subscriptions'
+  ) and not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'push_subscriptions'
+      and column_name = 'user_id'
+  ) then
+    drop table public.push_subscriptions;
+  end if;
+end $$;
+
 create table if not exists public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.user_profiles(id) on delete cascade,
