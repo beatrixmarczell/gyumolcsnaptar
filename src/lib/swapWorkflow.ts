@@ -161,3 +161,122 @@ export async function clearClosedSwapRequests(params: { accessToken?: string | n
     action: 'swap_requests_clear_closed',
   })
 }
+
+// ── Értesítések ──────────────────────────────────────────────────────────────
+
+export type SwapNotification = {
+  id: string
+  group_id: string
+  user_id: string
+  request_id: string | null
+  offer_id: string | null
+  event_type: string
+  title: string
+  body: string | null
+  payload: Record<string, unknown>
+  read_at: string | null
+  created_at: string
+}
+
+export async function loadNotifications(params: { accessToken?: string | null }): Promise<SwapNotification[]> {
+  const json = await callGateway<{ notifications?: SwapNotification[] }>(params.accessToken, {
+    action: 'notifications_list',
+  })
+  return json.notifications ?? []
+}
+
+export async function markNotificationsRead(params: {
+  accessToken?: string | null
+  notificationId?: string
+}): Promise<void> {
+  await callGateway(params.accessToken, {
+    action: 'notifications_mark_read',
+    notificationId: params.notificationId,
+  })
+}
+
+// ── Push feliratkozás ─────────────────────────────────────────────────────────
+
+export async function registerPushSubscription(params: {
+  accessToken?: string | null
+  endpoint: string
+  p256dh: string
+  authKey: string
+}): Promise<void> {
+  await callGateway(params.accessToken, {
+    action: 'push_subscribe',
+    endpoint: params.endpoint,
+    p256dh: params.p256dh,
+    authKey: params.authKey,
+  })
+}
+
+export async function unregisterPushSubscription(params: {
+  accessToken?: string | null
+  endpoint: string
+}): Promise<void> {
+  await callGateway(params.accessToken, {
+    action: 'push_unsubscribe',
+    endpoint: params.endpoint,
+  })
+}
+
+// ── Értesítési preferenciák ───────────────────────────────────────────────────
+
+export type NotificationPrefs = {
+  notification_email?: string | null
+  notify_email_calendar?: boolean
+  notify_push_calendar?: boolean
+  notify_email_swap?: boolean
+  notify_push_swap?: boolean
+}
+
+export async function updateNotificationPrefs(params: {
+  accessToken?: string | null
+  prefs: NotificationPrefs
+}): Promise<void> {
+  await callGateway(params.accessToken, {
+    action: 'update_notification_prefs',
+    notificationEmail: params.prefs.notification_email,
+    notifyEmailCalendar: params.prefs.notify_email_calendar,
+    notifyPushCalendar: params.prefs.notify_push_calendar,
+    notifyEmailSwap: params.prefs.notify_email_swap,
+    notifyPushSwap: params.prefs.notify_push_swap,
+  })
+}
+
+// ── Admin szülő-gyerek hozzárendelés ─────────────────────────────────────────
+
+export type ParentLinkRow = {
+  child_name: string
+  user_id: string
+  user_profiles: { id: string; display_name: string | null; email: string | null } | null
+}
+
+export type MemberRow = {
+  user_id: string
+  role: string
+  user_profiles: { id: string; display_name: string | null; email: string | null } | null
+}
+
+export async function loadParentLinks(params: { accessToken?: string | null }): Promise<{
+  links: ParentLinkRow[]
+  members: MemberRow[]
+}> {
+  const json = await callGateway<{ links?: ParentLinkRow[]; members?: MemberRow[] }>(params.accessToken, {
+    action: 'parent_links_list',
+  })
+  return { links: json.links ?? [], members: json.members ?? [] }
+}
+
+export async function setParentLinks(params: {
+  accessToken?: string | null
+  childName: string
+  userIds: string[]
+}): Promise<void> {
+  await callGateway(params.accessToken, {
+    action: 'parent_links_set',
+    childName: params.childName,
+    userIds: params.userIds,
+  })
+}

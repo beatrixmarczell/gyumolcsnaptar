@@ -29,6 +29,10 @@ import {
 } from './lib/swapWorkflow'
 import { inferEditorLinkedChildrenFromTokens } from './lib/editorChildInference'
 import { resolveDemoParentLinkedChild } from './lib/demoParentChildMap'
+import { NotificationBell } from './components/NotificationBell'
+import { NotificationPrefsPanel } from './components/NotificationPrefsPanel'
+import { ParentLinksAdminPanel } from './components/ParentLinksAdminPanel'
+import type { NotificationPrefs } from './lib/swapWorkflow'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -336,6 +340,7 @@ function App() {
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
   /** `null` = nincs szűrés (admin / még nem töltött); tömb = szerkesztő linked gyerekek. */
   const [linkedChildren, setLinkedChildren] = useState<string[] | null>(null)
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs | null>(null)
   const [manualSaveSnapshot, setManualSaveSnapshot] = useState<ManualSaveSnapshot | null>(() => {
     try {
       const stored = localStorage.getItem(MANUAL_SAVE_SNAPSHOT_STORAGE_KEY)
@@ -457,6 +462,9 @@ function App() {
         }
         if (remote.linkedChildren !== undefined) {
           setLinkedChildren(remote.linkedChildren)
+        }
+        if ((remote as { notificationPrefs?: NotificationPrefs | null }).notificationPrefs !== undefined) {
+          setNotificationPrefs((remote as { notificationPrefs?: NotificationPrefs | null }).notificationPrefs ?? null)
         }
         const shouldMergeRemoteCalendarIntoUi =
           Boolean(remote.payload) &&
@@ -1801,6 +1809,12 @@ function App() {
                 {authReady ? `Felhasználó: ${userDisplayName ?? '—'} (${userRole})` : 'Felhasználó: ellenőrzés…'}
               </span>
             ) : null}
+            {KEYCLOAK_AUTH && isAuthenticated ? (
+              <NotificationBell
+                accessToken={gatewayAccessToken}
+                isAuthenticated={isAuthenticated}
+              />
+            ) : null}
             <div className="ui-controls">
               {KEYCLOAK_AUTH && authReady && !isAuthenticated ? (
                 <button
@@ -1938,6 +1952,28 @@ function App() {
               <p className="compact-note">Nincs fejléckép betöltve.</p>
             )}
           </details>
+
+          {KEYCLOAK_AUTH && isAuthenticated ? (
+            <details className="collapsible-box">
+              <summary>Értesítési beállítások</summary>
+              <NotificationPrefsPanel
+                accessToken={gatewayAccessToken}
+                userEmail={userEmail}
+                initialPrefs={notificationPrefs}
+              />
+            </details>
+          ) : null}
+
+          {KEYCLOAK_AUTH && isAuthenticated && userRole === 'admin' ? (
+            <details className="collapsible-box">
+              <summary>Szülő-gyerek hozzárendelés (admin)</summary>
+              <ParentLinksAdminPanel
+                accessToken={gatewayAccessToken}
+                children={children}
+              />
+            </details>
+          ) : null}
+
           </aside>
           </div>
         </div>

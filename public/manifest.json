@@ -1,0 +1,18 @@
+{
+  "name": "Gyümölcsnaptár",
+  "short_name": "Gyümölcs",
+  "description": "Óvodai gyümölcsnapok beosztása és csere kezelése",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2d7a2d",
+  "lang": "hu",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
