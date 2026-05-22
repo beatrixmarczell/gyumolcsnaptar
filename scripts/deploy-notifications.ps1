@@ -1,6 +1,6 @@
-# Gyümölcsnaptár – értesítési rendszer Supabase deploy
-# Előfeltétel: Supabase projekt UNPAUSED (Dashboard → Restore project)
-# Használat: .\scripts\deploy-notifications.ps1 -ProjectRef dxqweukbtuckvrdvlcjd
+# Gyumolcsnaptar - ertesitesi rendszer Supabase deploy
+# Elofeltetel: Supabase projekt UNPAUSED (Dashboard -> Restore project)
+# Hasznalat: .\scripts\deploy-notifications.ps1 -ProjectRef dxqweukbtuckvrdvlcjd
 
 param(
     [Parameter(Mandatory = $true)]
@@ -23,14 +23,14 @@ function Get-EnvValue([string]$Name) {
 }
 
 Write-Host "Linking Supabase project $ProjectRef ..."
-npx supabase link --project-ref $ProjectRef
+& npx --yes supabase link --project-ref $ProjectRef
 
 Write-Host "Pushing DB migrations ..."
-npx supabase db push
+& npx --yes supabase db push
 
 Write-Host "Deploying Edge Functions ..."
-npx supabase functions deploy keycloak-gateway --no-verify-jwt
-npx supabase functions deploy daily-fruit-reminder --no-verify-jwt
+& npx --yes supabase functions deploy keycloak-gateway --no-verify-jwt
+& npx --yes supabase functions deploy daily-fruit-reminder --no-verify-jwt
 
 Write-Host "Setting notification secrets ..."
 $secrets = @(
@@ -45,13 +45,14 @@ $resendKey = Get-EnvValue 'RESEND_API_KEY'
 if ($resendKey -notmatch '^re_xxxxxxxx') {
     $secrets += "RESEND_API_KEY=$resendKey"
 } else {
-    Write-Warning "RESEND_API_KEY is still a placeholder – skip or set in $EnvFile first."
+    Write-Warning "RESEND_API_KEY is still a placeholder - skip or set in $EnvFile first."
 }
 
-npx supabase secrets set @secrets
+$secretArgs = @('supabase', 'secrets', 'set') + $secrets
+& npx --yes @secretArgs
 
 Write-Host ""
-Write-Host "Done. Manual steps remaining:"
-Write-Host "  1. Supabase Dashboard -> Edge Functions -> daily-fruit-reminder -> Schedules -> 0 5 * * *"
-Write-Host "  2. Resend.com: domain verify + real RESEND_API_KEY in secrets if skipped"
-Write-Host "  3. Test: swap notification + push subscribe on next.gyuminaptar.hu"
+Write-Host 'Done. Manual steps remaining:'
+Write-Host '  1. Supabase Dashboard -> Edge Functions -> daily-fruit-reminder -> Schedules -> cron: 0 5 * * *'
+Write-Host '  2. Resend.com: domain verify + real RESEND_API_KEY in secrets if skipped'
+Write-Host '  3. Test swap notification and push subscribe on next.gyuminaptar.hu'
