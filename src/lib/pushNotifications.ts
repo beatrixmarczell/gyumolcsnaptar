@@ -5,11 +5,52 @@
 
 export const PUSH_SW_PATH = '/sw.js'
 
-const VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) ?? ''
+const VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)?.trim() ?? ''
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray
+}
 
 export function isPushSupported(): boolean {
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+}
+
+export function isVapidConfigured(): boolean {
+  return Boolean(VAPID_PUBLIC_KEY)
+}
+
+/** Böngésző engedélykérés (felhasználói kattintásra hívandó). */
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (!('Notification' in window)) {
+    return 'denied'
+  }
+  if (Notification.permission === 'granted') {
+    return 'granted'
+  }
+  if (Notification.permission === 'denied') {
+    return 'denied'
+  }
+  return Notification.requestPermission()
+}
+
+/** Inkognitó/privát mód – Chrome gyakran alapból tiltja az értesítéseket. */
+export async function detectLikelyPrivateMode(): Promise<boolean> {
+  try {
+    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+      await navigator.storage.getDirectory()
+      return false
+    }
+  } catch {
+    return true
+  }
+  return false
 }
 
 export async function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
@@ -41,15 +82,15 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
     throw new Error('A böngésző nem támogatja a push értesítéseket.')
   }
   if (!VAPID_PUBLIC_KEY) {
-    throw new Error('Hiányzó VITE_VAPID_PUBLIC_KEY konfiguráció.')
+    throw new Error('Hiányzó VITE_VAPID_PUBLIC_KEY – ellenőrizd a .env.local fájlt.')
   }
-  const permission = await Notification.requestPermission()
+  const permission = await requestNotificationPermission()
   if (permission !== 'granted') {
     return null
   }
   const reg = await getServiceWorkerRegistration()
   if (!reg) {
-    throw new Error('Service Worker nem elérhető.')
+    throw new Error('Service Worker nem elérhető. Frissítsd az oldalt, majd próbáld újra.')
   }
   const existing = await reg.pushManager.getSubscription()
   if (existing) {
@@ -57,7 +98,7 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
   }
   const subscription = await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: VAPID_PUBLIC_KEY,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
   })
   return subscription
 }

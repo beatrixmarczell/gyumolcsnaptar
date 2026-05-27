@@ -170,19 +170,27 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
   const endpoint = getFunctionUrl('keycloak-gateway')
   const groupId = getDefaultGroupId()
   if (!endpoint || !groupId) {
-    throw new Error('A keycloak-gateway endpoint nincs konfigurálva.')
+    throw new Error('A keycloak-gateway endpoint nincs konfigurálva (.env.local).')
   }
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: buildEdgeFunctionHeaders(accessToken),
-    body: JSON.stringify({ action: 'load', groupId }),
-  })
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: buildEdgeFunctionHeaders(accessToken),
+      body: JSON.stringify({ action: 'load', groupId }),
+    })
+  } catch {
+    throw new Error(
+      'Nem sikerült elérni a szervert (Failed to fetch). Ellenőrizd a VITE_SUPABASE_URL értékét és indítsd újra a dev szervert.',
+    )
+  }
   const json = (await response.json()) as {
     payload?: unknown
     role?: AppUserRole
     displayName?: string | null
     userProfileId?: string | null
     linkedChildren?: unknown
+    notificationPrefs?: CloudLoadResult['notificationPrefs']
     error?: string
   }
 
@@ -204,6 +212,9 @@ async function fetchViaKeycloakGateway(accessToken: string): Promise<CloudLoadRe
     result.linkedChildren = []
   } else {
     result.linkedChildren = null
+  }
+  if (Object.prototype.hasOwnProperty.call(json, 'notificationPrefs')) {
+    result.notificationPrefs = json.notificationPrefs ?? null
   }
   return result
 }

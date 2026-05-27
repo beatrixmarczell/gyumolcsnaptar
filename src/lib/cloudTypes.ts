@@ -31,4 +31,11 @@ export type CloudLoadResult = {
   displayName: string | null
   userProfileId?: string | null
   linkedChildren?: string[] | null
+  notificationPrefs?: {
+    notification_email?: string | null
+    notify_email_calendar?: boolean
+    notify_push_calendar?: boolean
+    notify_email_swap?: boolean
+    notify_push_swap?: boolean
+  } | null
 }

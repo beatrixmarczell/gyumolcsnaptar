@@ -1537,14 +1537,21 @@ Deno.serve(async (req) => {
       if (typeof body.notifyPushSwap === 'boolean') {
         updates.notify_push_swap = body.notifyPushSwap
       }
-      const { error } = await supabase
+      const { data: updatedRow, error } = await supabase
         .from('user_profiles')
         .update(updates)
         .eq('id', access.userId)
+        .select('id, notification_email, notify_email_calendar, notify_push_calendar, notify_email_swap, notify_push_swap')
+        .maybeSingle()
       if (error) {
         return json(500, { error: `Beállítások mentése sikertelen: ${error.message}` })
       }
-      return json(200, { ok: true })
+      if (!updatedRow) {
+        return json(404, {
+          error: 'Profil nem található ehhez a bejelentkezéshez. Jelentkezz ki és újra be, vagy kérd az admin segítségét.',
+        })
+      }
+      return json(200, { ok: true, notificationPrefs: updatedRow })
     }
 
     // ── parent_links_list (admin) ─────────────────────────────────────────────

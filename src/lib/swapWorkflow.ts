@@ -69,13 +69,20 @@ async function callGateway<T>(accessToken: string | null | undefined, body: Reco
   const endpoint = getFunctionUrl('keycloak-gateway')
   const groupId = getDefaultGroupId()
   if (!endpoint || !groupId) {
-    throw new Error('A keycloak-gateway endpoint nincs konfigurálva.')
+    throw new Error('A Supabase / keycloak-gateway nincs konfigurálva (.env.local).')
   }
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: buildEdgeFunctionHeaders(token),
-    body: JSON.stringify({ ...body, groupId }),
-  })
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: buildEdgeFunctionHeaders(token),
+      body: JSON.stringify({ ...body, groupId }),
+    })
+  } catch {
+    throw new Error(
+      'Nem sikerült elérni a szervert (Failed to fetch). Ellenőrizd a VITE_SUPABASE_URL értékét és az internetkapcsolatot.',
+    )
+  }
   const json = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string }
   if (!response.ok) {
     const serverMsg = json.error ?? json.message

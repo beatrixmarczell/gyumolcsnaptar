@@ -9,7 +9,13 @@ import {
   toDateKey,
 } from './calendar'
 import type { AppUserRole, HeaderImageState } from './lib/cloudTypes'
-import { getAccessToken, initAuth, isKeycloakConfigured, login, logout } from './lib/auth/keycloakAuth'
+import {
+  getAccessToken,
+  initAuth,
+  isKeycloakConfigured,
+  login,
+  logout,
+} from './lib/auth/keycloakAuth'
 import { isKeycloakAuthEnabled } from './lib/supabaseClient'
 import {
   applyAppStatePayload,
@@ -33,6 +39,11 @@ import { NotificationBell } from './components/NotificationBell'
 import { NotificationPrefsPanel } from './components/NotificationPrefsPanel'
 import { ParentLinksAdminPanel } from './components/ParentLinksAdminPanel'
 import type { NotificationPrefs } from './lib/swapWorkflow'
+import {
+  clearAllLocalNotificationPrefs,
+  loadLocalNotificationPrefs,
+  saveLocalNotificationPrefs,
+} from './lib/notificationPrefsStorage'
 
 const defaultChildren = [
   'Balassa-Molcsán Hunor',
@@ -71,6 +82,7 @@ const LAST_MONTH_STORAGE_KEY = 'fruit-calendar-last-month'
 const UI_THEME_STORAGE_KEY = 'fruit-calendar-ui-theme'
 const DARK_MODE_STORAGE_KEY = 'fruit-calendar-dark-mode'
 const SETTINGS_PANEL_OPEN_STORAGE_KEY = 'fruit-calendar-settings-panel-open'
+const PARENT_NOTIF_PANEL_FIRST_OPEN_KEY = 'fruit-calendar-parent-notif-panel-first-open'
 const OFFDAY_LABELS_STORAGE_KEY = 'fruit-calendar-offday-labels-by-month'
 const MANUAL_SAVE_SNAPSHOT_STORAGE_KEY = 'fruit-calendar-manual-save-snapshot'
 const DEFAULT_OFFDAY_LABEL = 'Nevelés nélküli nap'
@@ -338,6 +350,7 @@ function App() {
   const [userPreferredUsername, setUserPreferredUsername] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<AppUserRole>(KEYCLOAK_AUTH ? 'viewer' : 'admin')
   const [userProfileId, setUserProfileId] = useState<string | null>(null)
+  const [authUserSub, setAuthUserSub] = useState<string | null>(null)
   /** `null` = nincs szűrés (admin / még nem töltött); tömb = szerkesztő linked gyerekek. */
   const [linkedChildren, setLinkedChildren] = useState<string[] | null>(null)
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs | null>(null)
@@ -373,14 +386,14 @@ function App() {
   const [childFilterPanelOpen, setChildFilterPanelOpen] = useState(true)
   const [editingOffDayLabelCellKey, setEditingOffDayLabelCellKey] = useState<string | null>(null)
   const [editingOffDayLabelValue, setEditingOffDayLabelValue] = useState(DEFAULT_OFFDAY_LABEL)
-  const cloudBootstrapStarted = useRef(false)
+  const lastCloudFetchSub = useRef<string | null>(null)
   const forcedMonthStartRef = useRef<{ monthValue: string; startChild: string } | null>(null)
   const calendarMonthPickerRef = useRef<HTMLInputElement | null>(null)
   const offDayLabelInputRef = useRef<HTMLInputElement | null>(null)
 
-  const canEdit = KEYCLOAK_AUTH
-    ? isAuthenticated && (userRole === 'admin' || userRole === 'editor')
-    : true
+  const canEditCalendar = KEYCLOAK_AUTH ? isAuthenticated && userRole === 'admin' : true
+  const isParentEditor = KEYCLOAK_AUTH && isAuthenticated && userRole === 'editor'
+  const showSettingsSidebar = canEditCalendar || isParentEditor
   // A lokális bearer csak kijelentkezve (!isAuthenticated): bejelentkezve kötelező a Keycloak JWT,
   // különben minden hívás a gateway DESKTOP_ACCESS_TOKEN ágára esik → mindig admin.
   const useLocalGatewayToken =
@@ -404,11 +417,15 @@ function App() {
       setUserDisplayName(session.displayName ?? session.email)
       setUserEmail(session.email ?? null)
       setUserPreferredUsername(session.preferredUsername ?? null)
+      setAuthUserSub(session.sub ?? null)
       if (!session.authenticated) {
-        cloudBootstrapStarted.current = false
+        lastCloudFetchSub.current = null
         setLinkedChildren(null)
         setUserEmail(null)
         setUserPreferredUsername(null)
+        setAuthUserSub(null)
+        setUserProfileId(null)
+        setNotificationPrefs(null)
         // Viewer mode: only show cloud "loading" when sync is actually enabled (waiting for login).
         if (CLOUD_SYNC) {
           setCloudStatus('loading')
@@ -443,11 +460,9 @@ function App() {
     if (!shouldApplyCloudPayload && !shouldFetchKeycloakProfile) {
       return
     }
-    if (shouldApplyCloudPayload && cloudBootstrapStarted.current) {
+    const fetchIdentityKey = authUserSub ?? gatewayAccessToken ?? ''
+    if (fetchIdentityKey && lastCloudFetchSub.current === fetchIdentityKey) {
       return
-    }
-    if (shouldApplyCloudPayload) {
-      cloudBootstrapStarted.current = true
     }
     const run = async (): Promise<void> => {
       if (CLOUD_SYNC && shouldApplyCloudPayload) {
@@ -455,6 +470,7 @@ function App() {
       }
       try {
         const remote = await fetchGroupState({ accessToken: gatewayAccessToken })
+        lastCloudFetchSub.current = fetchIdentityKey
         setUserRole((prev) => keepHigherRole(prev, remote.role))
         setUserProfileId(remote.userProfileId ?? null)
         if (remote.displayName) {
@@ -463,8 +479,15 @@ function App() {
         if (remote.linkedChildren !== undefined) {
           setLinkedChildren(remote.linkedChildren)
         }
-        if ((remote as { notificationPrefs?: NotificationPrefs | null }).notificationPrefs !== undefined) {
-          setNotificationPrefs((remote as { notificationPrefs?: NotificationPrefs | null }).notificationPrefs ?? null)
+        if (remote.notificationPrefs !== undefined) {
+          setNotificationPrefs(remote.notificationPrefs ?? null)
+          if (remote.notificationPrefs) {
+            saveLocalNotificationPrefs(
+              remote.userProfileId ?? null,
+              userEmail,
+              remote.notificationPrefs,
+            )
+          }
         }
         const shouldMergeRemoteCalendarIntoUi =
           Boolean(remote.payload) &&
@@ -492,6 +515,10 @@ function App() {
         }
       } catch (e) {
         console.error('Felhő betöltés:', e)
+        const localPrefs = loadLocalNotificationPrefs(userProfileId, userEmail)
+        if (localPrefs) {
+          setNotificationPrefs(localPrefs)
+        }
         if (CLOUD_SYNC && shouldApplyCloudPayload) {
           setCloudStatus('err')
         }
@@ -502,13 +529,13 @@ function App() {
       }
     }
     void run()
-  }, [authReady, isAuthenticated, gatewayAccessToken])
+  }, [authReady, isAuthenticated, gatewayAccessToken, authUserSub, userEmail])
 
   useEffect(() => {
     if (!CLOUD_SYNC || !canSaveToCloud) {
       return
     }
-    if (KEYCLOAK_AUTH && (!isAuthenticated || !gatewayAccessToken || !canEdit)) {
+    if (KEYCLOAK_AUTH && (!isAuthenticated || !gatewayAccessToken || !canEditCalendar)) {
       return
     }
     const payload = buildAppStatePayload({
@@ -549,7 +576,7 @@ function App() {
     isAuthenticated,
     gatewayAccessToken,
     userRole,
-    canEdit,
+    canEditCalendar,
   ])
 
   useEffect(() => {
@@ -632,6 +659,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SETTINGS_PANEL_OPEN_STORAGE_KEY, `${settingsPanelOpen}`)
   }, [settingsPanelOpen])
+
+  useEffect(() => {
+    if (!isParentEditor) {
+      return
+    }
+    const userKey = userProfileId ?? userEmail ?? 'anonymous'
+    const seenKey = `${PARENT_NOTIF_PANEL_FIRST_OPEN_KEY}:${userKey}`
+    if (!localStorage.getItem(seenKey)) {
+      setSettingsPanelOpen(true)
+      localStorage.setItem(seenKey, 'true')
+    }
+  }, [isParentEditor, userProfileId, userEmail])
 
   useEffect(() => {
     localStorage.setItem(OFFDAY_LABELS_STORAGE_KEY, JSON.stringify(offDayLabelsByMonth))
@@ -785,8 +824,8 @@ function App() {
     () => (manualSaveSnapshot ? JSON.stringify(manualSaveSnapshot.payload) : null),
     [manualSaveSnapshot],
   )
-  const canCreateManualSave = canEdit && !isManualSaveBusy && currentPayloadSignature !== manualSnapshotSignature
-  const canRestoreLastManualSave = canEdit && !isRestoreBusy && Boolean(manualSaveSnapshot)
+  const canCreateManualSave = canEditCalendar && !isManualSaveBusy && currentPayloadSignature !== manualSnapshotSignature
+  const canRestoreLastManualSave = canEditCalendar && !isRestoreBusy && Boolean(manualSaveSnapshot)
   const isAdminDemoUser = useMemo(() => {
     const normalized = (userDisplayName ?? '').trim().toLowerCase()
     return normalized === 'admin.demo' || normalized === 'admin_demo' || normalized.includes('demo admin')
@@ -1280,6 +1319,11 @@ function App() {
   }
 
   const doLogout = (): void => {
+    lastCloudFetchSub.current = null
+    clearAllLocalNotificationPrefs()
+    setUserProfileId(null)
+    setNotificationPrefs(null)
+    setAuthUserSub(null)
     void logout()
   }
 
@@ -1363,7 +1407,7 @@ function App() {
   }
 
   const toggleCalendarOffDay = (dateKey: string, withRangeSelection: boolean): void => {
-    if (!canEdit) {
+    if (!canEditCalendar) {
       return
     }
     const targetKeys =
@@ -1386,7 +1430,7 @@ function App() {
   }
 
   const beginCalendarOffDayDrag = (dateKey: string): void => {
-    if (!canEdit) {
+    if (!canEditCalendar) {
       return
     }
     const dragMode: 'add' | 'remove' = extraOffDays.has(dateKey) ? 'remove' : 'add'
@@ -1401,7 +1445,7 @@ function App() {
   }
 
   const extendCalendarOffDayDrag = (dateKey: string): void => {
-    if (!canEdit || !offDayDragMode) {
+    if (!canEditCalendar || !offDayDragMode) {
       return
     }
     if (offDayDragTouchedRef.current.has(dateKey)) {
@@ -1429,7 +1473,7 @@ function App() {
   }
 
   const startEditingOffDayLabel = (dateKey: string): void => {
-    if (!canEdit) {
+    if (!canEditCalendar) {
       return
     }
     setEditingOffDayLabelCellKey(dateKey)
@@ -1699,7 +1743,7 @@ function App() {
     try {
       localStorage.setItem(MANUAL_SAVE_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot))
       setManualSaveSnapshot(snapshot)
-      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && gatewayAccessToken && canEdit) {
+      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && gatewayAccessToken && canEditCalendar) {
         await saveGroupState(snapshot.payload, { accessToken: gatewayAccessToken, role: userRole })
         setCloudStatus('ok')
       }
@@ -1736,7 +1780,7 @@ function App() {
           setManualOverrides: () => {},
         },
       )
-      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && gatewayAccessToken && canEdit) {
+      if (CLOUD_SYNC && KEYCLOAK_AUTH && isAuthenticated && gatewayAccessToken && canEditCalendar) {
         await saveGroupState(manualSaveSnapshot.payload, { accessToken: gatewayAccessToken, role: userRole })
         setCloudStatus('ok')
       }
@@ -1858,11 +1902,11 @@ function App() {
         </div>
       </header>
 
-      <section className={`layout ${canEdit ? (settingsPanelOpen ? '' : 'sidebar-collapsed') : 'layout-readonly'}`}>
+      <section className={`layout ${isParentEditor ? 'layout--parent-editor' : ''} ${showSettingsSidebar ? (settingsPanelOpen ? '' : 'sidebar-collapsed') : 'layout-readonly'}`}>
         <button
           type="button"
           className="sidebar-toggle"
-          style={{ display: canEdit ? undefined : 'none' }}
+          style={{ display: showSettingsSidebar ? undefined : 'none' }}
           onClick={() => setSettingsPanelOpen((prev) => !prev)}
           aria-label={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
           title={settingsPanelOpen ? 'Beállítások panel becsukása' : 'Beállítások panel kinyitása'}
@@ -1871,7 +1915,7 @@ function App() {
           <span className="sidebar-toggle-icon-desktop">{settingsPanelOpen ? '◀' : '▶'}</span>
           <span className="sidebar-toggle-icon-mobile">{settingsPanelOpen ? '▼' : '▲'}</span>
         </button>
-        {canEdit ? (
+        {showSettingsSidebar ? (
         <div className="settings-panel-shell">
           <button
             type="button"
@@ -1883,9 +1927,10 @@ function App() {
             <span>{settingsPanelOpen ? '▼' : '▲'}</span>
           </button>
           <div className={`mobile-panel-content ${settingsPanelOpen ? '' : 'mobile-collapsed'}`}>
-          <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'}`}>
-            <h2>Beállítások</h2>
+          <aside className={`panel settings-panel ${settingsPanelOpen ? '' : 'collapsed'} ${isParentEditor ? 'settings-panel--notifications-only' : ''}`}>
+            {!isParentEditor ? <h2>Beállítások</h2> : null}
 
+          {canEditCalendar ? (
           <details className="collapsible-box">
             <summary>Névsor (1 sor = 1 név)</summary>
             <label>
@@ -1893,13 +1938,15 @@ function App() {
               <textarea
                 className="roster-textarea"
                 value={childrenText}
-                disabled={!canEdit}
+                disabled={!canEditCalendar}
                 onChange={(e) => setChildrenText(e.target.value)}
                 rows={7}
               />
             </label>
           </details>
+          ) : null}
 
+          {canEditCalendar ? (
           <details className="collapsible-box" open={Boolean(headerImage)}>
             <summary>Fejléckép (referencia designhoz)</summary>
             <label>
@@ -1907,7 +1954,7 @@ function App() {
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                disabled={!canEdit}
+                disabled={!canEditCalendar}
                 onChange={async (e) => {
                   const file = e.target.files?.[0]
                   if (!file) {
@@ -1939,7 +1986,7 @@ function App() {
                 <button
                   type="button"
                   className="action-button secondary"
-                  disabled={!canEdit}
+                  disabled={!canEditCalendar}
                   onClick={() => {
                     setHeaderImage(null)
                     localStorage.removeItem('fruit-calendar-header-image')
@@ -1952,16 +1999,27 @@ function App() {
               <p className="compact-note">Nincs fejléckép betöltve.</p>
             )}
           </details>
+          ) : null}
 
           {KEYCLOAK_AUTH && isAuthenticated ? (
-            <details className="collapsible-box">
-              <summary>Értesítési beállítások</summary>
+            isParentEditor ? (
               <NotificationPrefsPanel
                 accessToken={gatewayAccessToken}
                 userEmail={userEmail}
+                userProfileId={userProfileId}
                 initialPrefs={notificationPrefs}
               />
-            </details>
+            ) : (
+              <details className="collapsible-box" open>
+                <summary>Értesítési beállítások</summary>
+                <NotificationPrefsPanel
+                  accessToken={gatewayAccessToken}
+                  userEmail={userEmail}
+                  userProfileId={userProfileId}
+                  initialPrefs={notificationPrefs}
+                />
+              </details>
+            )
           ) : null}
 
           {KEYCLOAK_AUTH && isAuthenticated && userRole === 'admin' ? (
@@ -2255,7 +2313,7 @@ function App() {
                 aria-label="Hónap választás"
               />
             </div>
-            {canEdit ? (
+            {canEditCalendar ? (
               <p className="compact-note calendar-offday-hint">
                 Tipp: jobb felső +/− ikonnal egy napot állítasz szünnappá; Shift + kattintásnál intervallumot vált; az egeret húzva több napot is ki tudsz jelölni.
               </p>
@@ -2283,9 +2341,9 @@ function App() {
                       return (
                         <td
                           key={item.dateKey}
-                          className={`calendar-day-cell ${item.child ? '' : 'offday'} ${canEdit ? 'calendar-day-cell--editable' : ''}`}
+                          className={`calendar-day-cell ${item.child ? '' : 'offday'} ${canEditCalendar ? 'calendar-day-cell--editable' : ''}`}
                           onMouseDown={(e) => {
-                            if (!canEdit || e.button !== 0) {
+                            if (!canEditCalendar || e.button !== 0) {
                               return
                             }
                             const target = e.target as HTMLElement
@@ -2300,7 +2358,7 @@ function App() {
                           }}
                         >
                           <div className="day">{item.date.getDate()}</div>
-                          {canEdit ? (
+                          {canEditCalendar ? (
                             <button
                               type="button"
                               className={`offday-toggle-button ${isOffDay ? 'is-offday' : ''}`}
@@ -2318,9 +2376,9 @@ function App() {
                               {isOffDay ? '−' : '+'}
                             </button>
                           ) : null}
-                          {canEdit ? (
+                          {canEditCalendar ? (
                             item.child ? (
-                              <select value={item.child} disabled={!canEdit} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
+                              <select value={item.child} disabled={!canEditCalendar} onChange={(e) => updateOverride(item.dateKey, e.target.value)}>
                                 {children.map((name) => (
                                   <option key={`${item.dateKey}-${name}`} value={name}>
                                     {name}

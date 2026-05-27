@@ -152,18 +152,27 @@ export async function login(): Promise<void> {
   await keycloak?.login({
     redirectUri: `${window.location.origin}${window.location.pathname}`,
     prompt: 'login',
+    maxAge: 0,
   })
 }
 
-export async function logout(): Promise<void> {
-  if (!keycloak) {
-    return
-  }
+/** Kijelentkezés / új felhasználó előtt: ne maradjon cache-elt init vagy token. */
+export function resetAuthClient(): void {
   if (refreshTimer != null) {
     window.clearInterval(refreshTimer)
     refreshTimer = null
   }
-  await keycloak.logout({ redirectUri: window.location.href })
+  initPromise = null
+  keycloak = null
+}
+
+export async function logout(): Promise<void> {
+  const instance = keycloak
+  resetAuthClient()
+  if (!instance) {
+    return
+  }
+  await instance.logout({ redirectUri: window.location.href })
 }
 
 export async function getAccessToken(): Promise<string | null> {
